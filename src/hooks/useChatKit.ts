@@ -8,6 +8,7 @@ import type {
   ChatKitOptions,
   AssistantMessageItem,
   WidgetItem,
+  WidgetNode,
   WorkflowItem,
   InferenceOptions,
   ContentPart,
@@ -258,44 +259,43 @@ export function useChatKit(options: ChatKitOptions): { control: ChatKitControl }
 
           case 'thread.item.updated': {
             // Handle new format: { item_id, update: { type, delta, ... } }
-            const evt = event as any;
-            if (evt.item_id && evt.update) {
-              const itemIndex = prev.items.findIndex((i) => i.id === evt.item_id);
+            if (event.item_id && event.update) {
+              const itemIndex = prev.items.findIndex((i) => i.id === event.item_id);
               if (itemIndex === -1) {
                 return prev;
               }
 
               const item = prev.items[itemIndex];
-              const updateType = evt.update.type;
+              const update = event.update;
 
               // Handle assistant_message updates
               if (item.type === 'assistant_message') {
                 let updatedItem = item;
 
-                if (updateType === 'assistant_message.content_part.added') {
+                if (update.type === 'assistant_message.content_part.added') {
                   // Initialize content part
                   updatedItem = {
                     ...item,
-                    content: [...item.content, evt.update.content],
+                    content: [...item.content, update.content],
                   } as AssistantMessageItem;
-                } else if (updateType === 'assistant_message.content_part.text_delta') {
+                } else if (update.type === 'assistant_message.content_part.text_delta') {
                   // Append text delta
-                  const contentIdx = evt.update.content_index ?? 0;
+                  const contentIdx = update.content_index ?? 0;
                   updatedItem = {
                     ...item,
                     content: item.content.map((c, idx) =>
                       idx === contentIdx && c.type === 'output_text'
-                        ? { ...c, text: (c.text || '') + evt.update.delta }
+                        ? { ...c, text: (c.text || '') + update.delta }
                         : c
                     ),
                   } as AssistantMessageItem;
-                } else if (updateType === 'assistant_message.content_part.done') {
+                } else if (update.type === 'assistant_message.content_part.done') {
                   // Finalize content part
-                  const contentIdx = evt.update.content_index ?? 0;
+                  const contentIdx = update.content_index ?? 0;
                   updatedItem = {
                     ...item,
                     content: item.content.map((c, idx) =>
-                      idx === contentIdx ? evt.update.content : c
+                      idx === contentIdx ? update.content : c
                     ),
                   } as AssistantMessageItem;
                 }
@@ -307,9 +307,9 @@ export function useChatKit(options: ChatKitOptions): { control: ChatKitControl }
 
               // Handle workflow updates
               if (item.type === 'workflow') {
-                if (updateType === 'workflow.task.added') {
-                  const task = evt.update.task;
-                  const taskIndex = evt.update.task_index ?? (item.workflow.tasks?.length || 0);
+                if (update.type === 'workflow.task.added') {
+                  const task = update.task;
+                  const taskIndex = update.task_index ?? (item.workflow.tasks?.length || 0);
                   const newTasks = [...(item.workflow.tasks || [])];
                   newTasks[taskIndex] = task;
 
@@ -322,19 +322,19 @@ export function useChatKit(options: ChatKitOptions): { control: ChatKitControl }
                   return { ...prev, items: newItems };
                 }
 
-                if (updateType === 'workflow.summary') {
+                if (update.type === 'workflow.summary') {
                   const updatedItem: WorkflowItem = {
                     ...item,
-                    workflow: { ...item.workflow, summary: evt.update.summary },
+                    workflow: { ...item.workflow, summary: update.summary },
                   };
                   const newItems = [...prev.items];
                   newItems[itemIndex] = updatedItem;
                   return { ...prev, items: newItems };
                 }
 
-                if (updateType === 'workflow.task.updated') {
-                  const task = evt.update.task;
-                  const taskIndex = evt.update.task_index ?? 0;
+                if (update.type === 'workflow.task.updated') {
+                  const task = update.task;
+                  const taskIndex = update.task_index ?? 0;
                   const newTasks = [...(item.workflow.tasks || [])];
                   if (taskIndex < newTasks.length) {
                     newTasks[taskIndex] = { ...newTasks[taskIndex], ...task };
@@ -369,8 +369,7 @@ export function useChatKit(options: ChatKitOptions): { control: ChatKitControl }
             };
 
           case 'thread.item.removed': {
-            const evt = event as any;
-            const itemId = evt.item_id;
+            const itemId = event.item_id;
             if (!itemId) return prev;
             return {
               ...prev,
@@ -379,11 +378,10 @@ export function useChatKit(options: ChatKitOptions): { control: ChatKitControl }
           }
 
           case 'thread.item.replaced': {
-            const evt = event as any;
-            if (!evt.item) return prev;
+            if (!event.item) return prev;
             return {
               ...prev,
-              items: prev.items.map((i) => (i.id === evt.item.id ? evt.item : i)),
+              items: prev.items.map((i) => (i.id === event.item.id ? event.item : i)),
             };
           }
 
@@ -408,21 +406,29 @@ export function useChatKit(options: ChatKitOptions): { control: ChatKitControl }
             return { ...prev, items: newItems };
           }
 
-          case 'widget.delta':
-          case 'widget.streaming_text.value_delta': {
-            const evt = event as any;
-            const componentId = evt.widget_id || evt.component_id;
-            const deltaText = evt.delta?.text || evt.delta;
-            const itemId = evt.item_id;
-
-            const itemIndex = prev.items.findIndex((i) => i.id === itemId);
+          case 'widget.delta': {
+            const itemIndex = prev.items.findIndex((i) => i.id === event.item_id);
             if (itemIndex === -1) return prev;
 
             const item = prev.items[itemIndex];
             if (item.type !== 'widget') return prev;
 
-            // Update text widget content
-            const updatedWidget = updateWidgetText(item.widget, componentId, deltaText);
+            const updatedWidget = updateWidgetText(item.widget, event.widget_id, event.delta.text);
+            const updatedItem: WidgetItem = { ...item, widget: updatedWidget };
+
+            const newItems = [...prev.items];
+            newItems[itemIndex] = updatedItem;
+            return { ...prev, items: newItems };
+          }
+
+          case 'widget.streaming_text.value_delta': {
+            const itemIndex = prev.items.findIndex((i) => i.id === event.item_id);
+            if (itemIndex === -1) return prev;
+
+            const item = prev.items[itemIndex];
+            if (item.type !== 'widget') return prev;
+
+            const updatedWidget = updateWidgetText(item.widget, event.component_id, event.delta);
             const updatedItem: WidgetItem = { ...item, widget: updatedWidget };
 
             const newItems = [...prev.items];
@@ -431,15 +437,14 @@ export function useChatKit(options: ChatKitOptions): { control: ChatKitControl }
           }
 
           case 'widget.root.updated': {
-            const evt = event as any;
             // Find the widget item and update its root
-            const itemIndex = prev.items.findIndex((i) => i.type === 'widget');
+            const itemIndex = prev.items.findIndex((i) => i.id === event.item_id);
             if (itemIndex === -1) return prev;
 
             const item = prev.items[itemIndex];
             if (item.type !== 'widget') return prev;
 
-            const updatedItem: WidgetItem = { ...item, widget: evt.widget };
+            const updatedItem: WidgetItem = { ...item, widget: event.widget };
             const newItems = [...prev.items];
             newItems[itemIndex] = updatedItem;
             return { ...prev, items: newItems };
@@ -832,21 +837,21 @@ export function useChatKit(options: ChatKitOptions): { control: ChatKitControl }
 // Helper Functions
 // ============================================================================
 
-function updateWidgetText(widget: any, widgetId: string, deltaText: string): any {
+function updateWidgetText(widget: WidgetNode, widgetId: string, deltaText: string): WidgetNode {
   if (!widget) return widget;
 
-  if (widget.id === widgetId) {
+  if (widget.id === widgetId && 'value' in widget) {
     return {
       ...widget,
-      value: (widget.value || '') + deltaText,
-    };
+      value: ((widget as { value: string }).value || '') + deltaText,
+    } as WidgetNode;
   }
 
-  if (widget.children && Array.isArray(widget.children)) {
+  if ('children' in widget && Array.isArray(widget.children)) {
     return {
       ...widget,
-      children: widget.children.map((child: any) => updateWidgetText(child, widgetId, deltaText)),
-    };
+      children: widget.children.map((child: WidgetNode) => updateWidgetText(child, widgetId, deltaText)),
+    } as WidgetNode;
   }
 
   return widget;

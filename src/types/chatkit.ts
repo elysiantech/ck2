@@ -534,8 +534,42 @@ export interface AssistantMessageContentPartTextDelta {
   delta: string;
 }
 
+export interface AssistantMessageContentPartAdded {
+  type: 'assistant_message.content_part.added';
+  content_index: number;
+  content: AssistantMessageContent;
+}
+
+export interface AssistantMessageContentPartDone {
+  type: 'assistant_message.content_part.done';
+  content_index: number;
+  content: AssistantMessageContent;
+}
+
+export interface WorkflowTaskAdded {
+  type: 'workflow.task.added';
+  task_index: number;
+  task: WorkflowTask;
+}
+
+export interface WorkflowTaskUpdated {
+  type: 'workflow.task.updated';
+  task_index: number;
+  task: Partial<WorkflowTask>;
+}
+
+export interface WorkflowSummaryUpdate {
+  type: 'workflow.summary';
+  summary: string;
+}
+
 export type ThreadItemUpdate =
   | AssistantMessageContentPartTextDelta
+  | AssistantMessageContentPartAdded
+  | AssistantMessageContentPartDone
+  | WorkflowTaskAdded
+  | WorkflowTaskUpdated
+  | WorkflowSummaryUpdate
   | WidgetStreamingTextValueDelta
   | WidgetComponentUpdated
   | WidgetRootUpdated;

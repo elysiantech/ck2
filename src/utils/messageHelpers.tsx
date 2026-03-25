@@ -1,9 +1,17 @@
 import React from 'react';
 import type { Entity, EntityPreview } from '../types';
 
+interface EntityTagData {
+  briefName?: string;
+  title?: string;
+  type?: string;
+  subtitle?: string;
+  icon?: string;
+}
+
 // Render user message content (handles input_text and input_tag types)
 export function renderUserMessageContent(
-  content: Array<{ type: string; text?: string; id?: string; data?: any }>,
+  content: Array<{ type: string; text?: string; id?: string; data?: EntityTagData }>,
   entityCallbacks?: {
     onClick?: (entity: Entity) => void;
     onRequestPreview?: (entity: Entity) => Promise<EntityPreview>;
@@ -70,40 +78,54 @@ export function extractAssistantMessageText(content: Array<{ type: string; text?
     .join('');
 }
 
+// Markdown component prop types
+interface ChildrenProps {
+  children?: React.ReactNode;
+}
+
+interface AnchorProps extends ChildrenProps {
+  href?: string;
+}
+
+interface ImageProps {
+  src?: string;
+  alt?: string;
+}
+
 // Markdown components for proper styling
 export const markdownComponents = {
-  h1: ({ children }: any) => <h1 className="text-2xl font-medium mt-6 mb-3">{children}</h1>,
-  h2: ({ children }: any) => <h2 className="text-xl font-medium mt-5 mb-2">{children}</h2>,
-  h3: ({ children }: any) => <h3 className="text-lg font-medium mt-4 mb-2">{children}</h3>,
-  p: ({ children }: any) => <p className="mb-3 leading-relaxed">{children}</p>,
-  ul: ({ children }: any) => <ul className="list-disc pl-5 mb-3 space-y-1">{children}</ul>,
-  ol: ({ children }: any) => <ol className="list-decimal pl-5 mb-3 space-y-1">{children}</ol>,
-  li: ({ children }: any) => <li className="leading-relaxed">{children}</li>,
-  table: ({ children }: any) => (
+  h1: ({ children }: ChildrenProps) => <h1 className="text-2xl font-medium mt-6 mb-3">{children}</h1>,
+  h2: ({ children }: ChildrenProps) => <h2 className="text-xl font-medium mt-5 mb-2">{children}</h2>,
+  h3: ({ children }: ChildrenProps) => <h3 className="text-lg font-medium mt-4 mb-2">{children}</h3>,
+  p: ({ children }: ChildrenProps) => <p className="mb-3 leading-relaxed">{children}</p>,
+  ul: ({ children }: ChildrenProps) => <ul className="list-disc pl-5 mb-3 space-y-1">{children}</ul>,
+  ol: ({ children }: ChildrenProps) => <ol className="list-decimal pl-5 mb-3 space-y-1">{children}</ol>,
+  li: ({ children }: ChildrenProps) => <li className="leading-relaxed">{children}</li>,
+  table: ({ children }: ChildrenProps) => (
     <div className="overflow-x-auto my-4">
       <table className="min-w-full border border-gray-200 rounded-lg">{children}</table>
     </div>
   ),
-  thead: ({ children }: any) => <thead className="bg-gray-50">{children}</thead>,
-  th: ({ children }: any) => <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 border-b border-gray-200">{children}</th>,
-  td: ({ children }: any) => <td className="px-4 py-2 text-sm text-gray-600 border-b border-gray-100">{children}</td>,
+  thead: ({ children }: ChildrenProps) => <thead className="bg-gray-50">{children}</thead>,
+  th: ({ children }: ChildrenProps) => <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 border-b border-gray-200">{children}</th>,
+  td: ({ children }: ChildrenProps) => <td className="px-4 py-2 text-sm text-gray-600 border-b border-gray-100">{children}</td>,
   // In react-markdown v9+, code blocks are <pre><code>...</code></pre>
   // Inline code is just <code>...</code>
   // We use a wrapper component to detect if we're inside a pre
-  pre: ({ children }: any) => (
+  pre: ({ children }: ChildrenProps) => (
     <pre className="bg-gray-50 p-4 rounded-lg overflow-x-auto my-3 text-sm font-mono [&>code]:bg-transparent [&>code]:p-0 [&>code]:rounded-none">
       {children}
     </pre>
   ),
-  code: ({ children }: any) => (
+  code: ({ children }: ChildrenProps) => (
     <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono">{children}</code>
   ),
-  blockquote: ({ children }: any) => <blockquote className="border-l-4 border-gray-300 pl-4 italic text-gray-600 my-3">{children}</blockquote>,
-  a: ({ href, children }: any) => <a href={href} className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>,
-  img: ({ src, alt }: any) => <img src={src} alt={alt || ''} className="max-w-full rounded-lg my-2" />,
+  blockquote: ({ children }: ChildrenProps) => <blockquote className="border-l-4 border-gray-300 pl-4 italic text-gray-600 my-3">{children}</blockquote>,
+  a: ({ href, children }: AnchorProps) => <a href={href} className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>,
+  img: ({ src, alt }: ImageProps) => <img src={src} alt={alt || ''} className="max-w-full rounded-lg my-2" />,
   hr: () => <hr className="my-4 border-gray-200" />,
-  strong: ({ children }: any) => <strong className="font-semibold">{children}</strong>,
-  em: ({ children }: any) => <em className="italic">{children}</em>,
+  strong: ({ children }: ChildrenProps) => <strong className="font-semibold">{children}</strong>,
+  em: ({ children }: ChildrenProps) => <em className="italic">{children}</em>,
 };
 
 // Render assistant content with widget support
