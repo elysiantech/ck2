@@ -174,7 +174,7 @@ export function ChatKit({ control, options }: ChatKitProps) {
   }, [showSkillsPanel, fetchSkills]);
 
   // Use a skill - pre-fill composer
-  const useSkill = useCallback((skill: SkillMetadata) => {
+  const handleSelectSkill = useCallback((skill: SkillMetadata) => {
     setInputValue(`Use the ${skill.name} skill`);
     setShowSkillsPanel(false);
     textareaRef.current?.focus();
@@ -431,7 +431,7 @@ export function ChatKit({ control, options }: ChatKitProps) {
                   skills.map((skill) => (
                     <button
                       key={skill.name}
-                      onClick={() => useSkill(skill)}
+                      onClick={() => handleSelectSkill(skill)}
                       className="w-full text-left px-3 py-2.5 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
                     >
                       <div className="flex items-start gap-2">

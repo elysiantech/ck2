@@ -55,13 +55,14 @@ export function WidgetRenderer({ widget, itemId, onAction }: WidgetRendererProps
       );
     }
 
-    case 'Text':
+    case 'Text': {
       const textClasses = [
         'text-gray-700',
         widget.weight === 'bold' ? 'font-medium' : '',
         widget.size === 'sm' ? 'text-sm' : widget.size === 'lg' ? 'text-lg' : '',
       ].filter(Boolean).join(' ');
       return <span className={textClasses}>{widget.value}</span>;
+    }
 
     case 'Markdown':
       return (
@@ -120,7 +121,7 @@ export function WidgetRenderer({ widget, itemId, onAction }: WidgetRendererProps
       );
     }
 
-    case 'Button':
+    case 'Button': {
       const btnVariant = widget.variant || 'primary';
       const btnClasses = btnVariant === 'outline'
         ? 'px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50'
@@ -132,11 +133,12 @@ export function WidgetRenderer({ widget, itemId, onAction }: WidgetRendererProps
           {widget.label}
         </button>
       );
+    }
 
     case 'Image':
       return <img src={widget.src} alt={widget.alt || ''} className="max-w-full rounded-lg" />;
 
-    case 'Stack':
+    case 'Stack': {
       const gapClass = widget.gap ? `gap-${widget.gap}` : 'gap-3';
       return (
         <div className={`flex ${widget.direction === 'col' ? 'flex-col' : 'flex-row'} ${gapClass}`}>
@@ -145,6 +147,7 @@ export function WidgetRenderer({ widget, itemId, onAction }: WidgetRendererProps
           ))}
         </div>
       );
+    }
 
     case 'Divider':
       return <hr className="my-3 border-gray-200" />;
@@ -163,7 +166,7 @@ export function WidgetRenderer({ widget, itemId, onAction }: WidgetRendererProps
         </a>
       );
 
-    case 'Badge':
+    case 'Badge': {
       const badgeColors: Record<string, string> = {
         gray: 'bg-gray-100 text-gray-700',
         blue: 'bg-blue-100 text-blue-700',
@@ -177,6 +180,7 @@ export function WidgetRenderer({ widget, itemId, onAction }: WidgetRendererProps
           {widget.text}
         </span>
       );
+    }
 
     case 'Select':
       return (
