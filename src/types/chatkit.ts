@@ -242,7 +242,9 @@ export type WidgetNode =
   | LinkWidget
   | BadgeWidget
   | ProgressWidget
-  | CodeBlockWidget;
+  | CodeBlockWidget
+  | RadioGroupWidget
+  | CheckboxWidget;
 
 export interface BaseWidget {
   id?: string;
@@ -259,6 +261,7 @@ export interface TextWidget extends BaseWidget {
   type: 'Text';
   value: string;
   size?: 'sm' | 'md' | 'lg';
+  weight?: 'normal' | 'bold';
   color?: 'primary' | 'secondary' | 'success' | 'warning' | 'error';
   streaming?: boolean;
   editable?: EditableProps;
@@ -353,6 +356,23 @@ export interface CodeBlockWidget extends BaseWidget {
   type: 'CodeBlock';
   code: string;
   language?: string;
+}
+
+export interface RadioGroupWidget extends BaseWidget {
+  type: 'RadioGroup';
+  name: string;
+  options: SelectOption[];
+  value?: string;
+  direction?: 'row' | 'col';
+  onChangeAction?: ActionConfig;
+}
+
+export interface CheckboxWidget extends BaseWidget {
+  type: 'Checkbox';
+  name: string;
+  label: string;
+  checked?: boolean;
+  onChangeAction?: ActionConfig;
 }
 
 export interface EditableProps {

@@ -2,11 +2,11 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { markdownComponents } from '../utils/messageHelpers';
-import type { ActionConfig } from '../types';
+import type { ActionConfig, WidgetNode, SelectOption } from '../types';
 
 // Widget renderer component - handles all ChatKit widget types
 interface WidgetRendererProps {
-  widget: any;
+  widget: WidgetNode;
   itemId?: string;
   onAction?: (action: ActionConfig) => void;
 }
@@ -18,14 +18,14 @@ export function WidgetRenderer({ widget, itemId, onAction }: WidgetRendererProps
     case 'Card':
       return (
         <div className="inline-block border border-gray-200 rounded-lg p-5 bg-white space-y-4 max-w-sm">
-          {widget.children?.map((child: any, i: number) => (
+          {widget.children?.map((child: WidgetNode, i: number) => (
             <WidgetRenderer key={i} widget={child} itemId={itemId} onAction={onAction} />
           ))}
         </div>
       );
 
     case 'Form': {
-      const isSubmitted = widget.children?.some((child: any) =>
+      const isSubmitted = widget.children?.some((child: WidgetNode) =>
         (child.type === 'RadioGroup' && child.value !== undefined) ||
         (child.type === 'Checkbox' && child.checked !== undefined)
       );
@@ -48,7 +48,7 @@ export function WidgetRenderer({ widget, itemId, onAction }: WidgetRendererProps
             }
           }}
         >
-          {widget.children?.map((child: any, i: number) => (
+          {widget.children?.map((child: WidgetNode, i: number) => (
             <WidgetRenderer key={i} widget={child} itemId={itemId} onAction={onAction} />
           ))}
         </form>
@@ -88,7 +88,7 @@ export function WidgetRenderer({ widget, itemId, onAction }: WidgetRendererProps
       const hasValue = widget.value !== undefined;
       return (
         <div className={`flex ${widget.direction === 'col' ? 'flex-col' : 'flex-row'} gap-3`}>
-          {widget.options?.map((opt: { label: string; value: string }, i: number) => (
+          {widget.options?.map((opt: SelectOption, i: number) => (
             <label key={i} className={`flex items-start gap-3 ${hasValue ? 'cursor-default' : 'cursor-pointer'}`}>
               <input
                 type="radio"
@@ -142,7 +142,7 @@ export function WidgetRenderer({ widget, itemId, onAction }: WidgetRendererProps
       const gapClass = widget.gap ? `gap-${widget.gap}` : 'gap-3';
       return (
         <div className={`flex ${widget.direction === 'col' ? 'flex-col' : 'flex-row'} ${gapClass}`}>
-          {widget.children?.map((child: any, i: number) => (
+          {widget.children?.map((child: WidgetNode, i: number) => (
             <WidgetRenderer key={i} widget={child} itemId={itemId} onAction={onAction} />
           ))}
         </div>
@@ -190,7 +190,7 @@ export function WidgetRenderer({ widget, itemId, onAction }: WidgetRendererProps
           className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-200"
         >
           {widget.placeholder && <option value="">{widget.placeholder}</option>}
-          {widget.options?.map((opt: { label: string; value: string }, i: number) => (
+          {widget.options?.map((opt: SelectOption, i: number) => (
             <option key={i} value={opt.value}>{opt.label}</option>
           ))}
         </select>
@@ -198,10 +198,10 @@ export function WidgetRenderer({ widget, itemId, onAction }: WidgetRendererProps
 
     default:
       // For unknown types, try to render children if they exist
-      if (widget.children && Array.isArray(widget.children)) {
+      if ('children' in widget && Array.isArray(widget.children)) {
         return (
           <div>
-            {widget.children.map((child: any, i: number) => (
+            {widget.children.map((child: WidgetNode, i: number) => (
               <WidgetRenderer key={i} widget={child} itemId={itemId} onAction={onAction} />
             ))}
           </div>
