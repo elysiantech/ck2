@@ -25,13 +25,23 @@ export function WidgetEmbed() {
             },
             widgets: {
               onShare: async ({ widgetCode, cssVars, widgetId, threadId }) => {
-                // TODO: Email capture modal
-                // TODO: Upload to Vercel Blob
+                // TODO: Email capture modal before download
                 // TODO: Log lead
                 console.log('[WidgetEmbed] Share:', { widgetId, threadId });
+
                 const html = buildShareableHtml(widgetCode, cssVars);
-                console.log('[WidgetEmbed] Generated HTML length:', html.length);
-                return null; // stub for now
+                const blob = new Blob([html], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `widget-${widgetId}.html`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                return null;
               },
             },
           }}

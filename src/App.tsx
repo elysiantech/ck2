@@ -81,11 +81,20 @@ function App() {
           options={{
             entities: entityOptions,
             widgets: {
-              onShare: async ({ widgetCode, cssVars }) => {
+              onShare: async ({ widgetCode, cssVars, widgetId }) => {
                 const html = buildShareableHtml(widgetCode, cssVars);
-                // TODO: upload to blob, return URL
-                console.log('[App] Share widget, HTML length:', html.length);
-                return null; // stub
+                const blob = new Blob([html], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `widget-${widgetId}.html`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                return null;
               },
             },
           }}
