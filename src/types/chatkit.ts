@@ -674,6 +674,7 @@ export interface ApiOptions {
   fetch?: (url: string, options: RequestInit) => Promise<Response>;
   clientToken?: string;
   uploadStrategy?: UploadStrategy;
+  headers?: Record<string, string>;
 }
 
 export interface UploadStrategy {

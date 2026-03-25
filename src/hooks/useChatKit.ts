@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { ChatKitAPI, createChatKitAPI } from '../api/chatkit';
 import type {
   ThreadMetadata,
@@ -837,10 +837,7 @@ export function useChatKit(options: ChatKitOptions): { control: ChatKitControl }
   // --------------------------------------------------------------------------
   // Initial Load
   // --------------------------------------------------------------------------
-
-  useEffect(() => {
-    refreshThreads();
-  }, []);
+  // Thread list is fetched lazily when history panel opens (ChatKit.tsx)
 
   // --------------------------------------------------------------------------
   // Return Control Object

@@ -18,11 +18,13 @@ export class ChatKitAPI {
   private baseUrl: string;
   private customFetch: (url: string, options: RequestInit) => Promise<Response>;
   private uploadUrl: string;
+  private customHeaders: Record<string, string>;
 
   constructor(options: ApiOptions) {
     // baseUrl should be like "http://localhost:3000/api/chatkit/chat"
     this.baseUrl = options.url.replace(/\/$/, '');
     this.customFetch = options.fetch || ((url, opts) => fetch(url, opts));
+    this.customHeaders = options.headers || {};
 
     // Upload URL from uploadStrategy, or derive from baseUrl
     // Default: /api/chatkit/upload (replace /chat with /upload)
@@ -42,6 +44,7 @@ export class ChatKitAPI {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...this.customHeaders,
       },
       body: JSON.stringify({ type, params }),
     });
@@ -125,6 +128,7 @@ export class ChatKitAPI {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
+        ...this.customHeaders,
       },
       body: JSON.stringify({
         type: actionType,
@@ -173,6 +177,7 @@ export class ChatKitAPI {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
+        ...this.customHeaders,
       },
       body: JSON.stringify({
         type: 'threads.create',
@@ -214,6 +219,7 @@ export class ChatKitAPI {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
+        ...this.customHeaders,
       },
       body: JSON.stringify({
         type: 'threads.add_client_tool_output',
@@ -270,6 +276,7 @@ export class ChatKitAPI {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...this.customHeaders,
       },
       body: JSON.stringify({
         type: 'attachments.delete',
@@ -297,6 +304,7 @@ export class ChatKitAPI {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
+        ...this.customHeaders,
       },
       body: JSON.stringify({
         type: 'threads.retry_after_item',
@@ -333,6 +341,7 @@ export class ChatKitAPI {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...this.customHeaders,
       },
       body: JSON.stringify({
         type: 'items.feedback',
@@ -360,6 +369,7 @@ export class ChatKitAPI {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
+        ...this.customHeaders,
       },
       body: JSON.stringify({
         type: 'threads.custom_action',
@@ -396,7 +406,10 @@ export class ChatKitAPI {
       : skillsUrl;
 
     try {
-      const response = await this.customFetch(url, { method: 'GET' });
+      const response = await this.customFetch(url, {
+        method: 'GET',
+        headers: this.customHeaders,
+      });
       if (!response.ok) {
         return [];
       }
