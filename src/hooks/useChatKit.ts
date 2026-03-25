@@ -101,13 +101,6 @@ export function useChatKit(options: ChatKitOptions): { control: ChatKitControl }
   const selectThread = useCallback(async (threadId: string | null) => {
     if (!apiRef.current) return;
 
-    // Persist to localStorage
-    if (threadId) {
-      localStorage.setItem('ck2_last_thread', threadId);
-    } else {
-      localStorage.removeItem('ck2_last_thread');
-    }
-
     if (!threadId) {
       setState((prev) => ({
         ...prev,

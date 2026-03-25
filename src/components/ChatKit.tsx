@@ -383,9 +383,10 @@ export function ChatKit({ control, options }: ChatKitProps) {
 
   return (
     <div className="relative h-full w-full flex justify-center">
-      <div className="relative h-full w-full max-w-2xl min-w-[320px] overflow-hidden bg-white border-x border-gray-200">
+      <div className="relative h-full w-full min-w-[320px] overflow-hidden bg-white">
       <div className="flex flex-col h-full">
-        {/* Header */}
+        {/* Header - only show if enabled (default true) */}
+        {options?.header?.enabled !== false && (
         <header className="flex items-center px-3 py-2 relative">
           {/* Thread title - shown when a thread is selected */}
           <div className="flex-1 truncate">
@@ -459,9 +460,10 @@ export function ChatKit({ control, options }: ChatKitProps) {
             </div>
           )}
         </header>
+        )}
 
-        {/* History Panel - Full Page */}
-        {showHistory && (
+        {/* History Panel - only show if enabled (default true) */}
+        {options?.history?.enabled !== false && showHistory && (
           <div className="absolute inset-0 bg-white z-20 flex flex-col">
             {/* Header */}
             <header className="flex items-center px-4 py-3 border-b border-gray-100">
@@ -599,8 +601,8 @@ export function ChatKit({ control, options }: ChatKitProps) {
           {/* Top fade gradient - absolute so it doesn't affect scroll height */}
           <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-white to-transparent pointer-events-none z-10" />
           {visibleItems.length === 0 && !state.isStreaming ? (
-            <div className="h-full flex items-center justify-center">
-              <h1 className="text-2xl font-semibold text-gray-900">
+            <div className="h-full flex items-center justify-center px-4">
+              <h1 className="text-2xl font-semibold text-gray-900 text-center">
                 {options?.startScreen?.greeting || 'What are you working on?'}
               </h1>
             </div>
@@ -675,14 +677,14 @@ export function ChatKit({ control, options }: ChatKitProps) {
 
                           // Use original content (preserving input_tag items) unless truncated AND not expanded
                           const contentToRender = (isTruncated && !isExpanded)
-                            ? [{ type: 'input_text', text: truncated }]
+                            ? [{ type: 'input_text' as const, text: truncated }]
                             : item.content;
 
                           return (
                             <>
                               <span className="text-gray-700 whitespace-pre-wrap">
                                 {renderUserMessageContent(
-                                  contentToRender,
+                                  contentToRender as Parameters<typeof renderUserMessageContent>[0],
                                   {
                                     onClick: options?.entities?.onClick,
                                     onRequestPreview: options?.entities?.onRequestPreview,
@@ -722,7 +724,14 @@ export function ChatKit({ control, options }: ChatKitProps) {
                           extractAssistantMessageText(item.content),
                           (text) => sendMessage(text),
                           state.isStreaming && item.status === 'in_progress',
-                          markdownComponents
+                          markdownComponents,
+                          options?.widgets?.onShare ? async (data) => {
+                            return options.widgets!.onShare!({
+                              ...data,
+                              widgetId: item.id,
+                              threadId: state.currentThread?.id,
+                            });
+                          } : undefined
                         )}
                       </div>
                       {/* Action icons - only show at end of assistant turn */}
@@ -1076,15 +1085,17 @@ export function ChatKit({ control, options }: ChatKitProps) {
             )}
 
             <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-4 py-2 border border-gray-200">
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="p-1.5 hover:bg-gray-200 rounded-full"
-                aria-label="Add attachment"
-              >
-                <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M9.335 16.5v-5.835H3.5a.665.665 0 1 1 0-1.33h5.835V3.5a.665.665 0 0 1 1.33 0v5.835H16.5l.134.014a.665.665 0 0 1 0 1.302l-.134.014h-5.835V16.5a.665.665 0 1 1-1.33 0Z"/>
-                </svg>
-              </button>
+              {options?.composer?.attachments?.enabled !== false && (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="p-1.5 hover:bg-gray-200 rounded-full"
+                  aria-label="Add attachment"
+                >
+                  <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M9.335 16.5v-5.835H3.5a.665.665 0 1 1 0-1.33h5.835V3.5a.665.665 0 0 1 1.33 0v5.835H16.5l.134.014a.665.665 0 0 1 0 1.302l-.134.014h-5.835V16.5a.665.665 0 1 1-1.33 0Z"/>
+                  </svg>
+                </button>
+              )}
 
               <textarea
                 ref={textareaRef}

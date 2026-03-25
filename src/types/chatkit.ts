@@ -708,7 +708,8 @@ export interface ComposerTool {
 }
 
 export interface AttachmentsOptions {
-  uploadStrategy: UploadStrategy;
+  enabled?: boolean;  // default: true
+  uploadStrategy?: UploadStrategy;
   maxSize?: number;
   maxCount?: number;
   accept?: Record<string, string[]>;
@@ -735,6 +736,15 @@ export interface EntitiesOptions {
   onClick?: (entity: Entity) => void;
 }
 
+export interface WidgetShareData {
+  widgetCode: string;  // the widget HTML string
+  cssVars: Record<string, string>;  // snapshotted at render time
+  widgetId: string;
+  threadId?: string;
+}
+
 export interface WidgetsOptions {
   onAction?: (action: ActionConfig, item: WidgetItem) => Promise<void>;
+  onShare?: (data: WidgetShareData) => Promise<string | null>;
+  // If onShare provided → Share button shows
 }

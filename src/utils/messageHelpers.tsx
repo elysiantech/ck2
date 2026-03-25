@@ -130,7 +130,8 @@ export function renderAssistantContent(
   text: string,
   onSendPrompt: (text: string) => void,
   isStreaming: boolean,
-  mdComponents: typeof markdownComponents
+  mdComponents: typeof markdownComponents,
+  onShare?: (data: { widgetCode: string; cssVars: Record<string, string> }) => Promise<string | null>
 ): React.ReactElement | React.ReactElement[] {
   // Don't parse while streaming (wait for closing ```)
   if (isStreaming) {
@@ -150,7 +151,7 @@ export function renderAssistantContent(
         </ReactMarkdown>
       );
     }
-    return <IframeWidget key={i} code={seg.code} onSendPrompt={onSendPrompt} />;
+    return <IframeWidget key={i} code={seg.code} onSendPrompt={onSendPrompt} onShare={onShare} />;
   });
 }
 

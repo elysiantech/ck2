@@ -1,6 +1,7 @@
-import { ChatKit } from './components';
+import { ChatKit, ResizablePanel } from './components';
 import { useChatKit } from './hooks';
 import type { Entity } from './types';
+import { buildShareableHtml } from './utils/widgetShare';
 import './index.css';
 
 function App() {
@@ -41,7 +42,11 @@ function App() {
 
     onThreadChange: ({ threadId }) => {
       console.log('[App] Thread changed:', threadId);
-      // Persist to localStorage, etc.
+      if (threadId) {
+        localStorage.setItem('ck2_last_thread', threadId);
+      } else {
+        localStorage.removeItem('ck2_last_thread');
+      }
     },
 
     onEffect: ({ name, data }) => {
@@ -60,8 +65,23 @@ function App() {
   });
 
   return (
-    <div className="h-screen w-screen">
-      <ChatKit control={control} options={{ entities: entityOptions }} />
+    <div className="h-screen w-screen bg-gray-100 flex items-center justify-center p-4">
+      <ResizablePanel>
+        <ChatKit
+          control={control}
+          options={{
+            entities: entityOptions,
+            widgets: {
+              onShare: async ({ widgetCode, cssVars }) => {
+                const html = buildShareableHtml(widgetCode, cssVars);
+                // TODO: upload to blob, return URL
+                console.log('[App] Share widget, HTML length:', html.length);
+                return null; // stub
+              },
+            },
+          }}
+        />
+      </ResizablePanel>
     </div>
   );
 }
