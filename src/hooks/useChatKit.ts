@@ -14,6 +14,8 @@ import type {
   ContentPart,
   SkillMetadata,
   ClientEffectEvent,
+  Entity,
+  InputTagContent,
 } from '../types/chatkit';
 
 // ============================================================================
@@ -55,6 +57,7 @@ export interface SendMessageOptions {
   quotedText?: string;
   inferenceOptions?: InferenceOptions;
   context?: Record<string, unknown>;
+  entities?: Map<string, Entity>;  // Tracked entities to convert to input_tag
 }
 
 // ============================================================================
@@ -479,8 +482,63 @@ export function useChatKit(options: ChatKitOptions): { control: ChatKitControl }
       abortControllerRef.current?.abort();
       abortControllerRef.current = new AbortController();
 
-      // Build content array with correct input_text type
-      const messageContent: ContentPart[] = [{ type: 'input_text', text: content }];
+      // Build content array, converting tracked entities to input_tag
+      const messageContent: ContentPart[] = [];
+      const entities = messageOptions?.entities;
+
+      if (entities && entities.size > 0) {
+        // Parse content to find @Title patterns and convert to input_tag
+        let remaining = content;
+
+        while (remaining.length > 0) {
+          // Find the earliest @Title match
+          let earliestMatch: { index: number; title: string; entity: Entity } | null = null;
+
+          for (const [title, entity] of entities) {
+            const pattern = `@${title}`;
+            const index = remaining.indexOf(pattern);
+            if (index !== -1 && (earliestMatch === null || index < earliestMatch.index)) {
+              earliestMatch = { index, title, entity };
+            }
+          }
+
+          if (earliestMatch) {
+            // Add text before the entity
+            if (earliestMatch.index > 0) {
+              messageContent.push({ type: 'input_text', text: remaining.slice(0, earliestMatch.index) });
+            }
+
+            // Add the entity as input_tag
+            const inputTag: InputTagContent = {
+              type: 'input_tag',
+              id: earliestMatch.entity.id,
+              text: earliestMatch.entity.title,
+            };
+            if (earliestMatch.entity.group) {
+              inputTag.group = earliestMatch.entity.group;
+            }
+            if (earliestMatch.entity.interactive !== undefined) {
+              inputTag.interactive = earliestMatch.entity.interactive;
+            }
+            if (earliestMatch.entity.data) {
+              inputTag.data = earliestMatch.entity.data;
+            }
+            messageContent.push(inputTag);
+
+            // Continue with the rest
+            remaining = remaining.slice(earliestMatch.index + earliestMatch.title.length + 1);
+          } else {
+            // No more entities found, add remaining text
+            if (remaining.length > 0) {
+              messageContent.push({ type: 'input_text', text: remaining });
+            }
+            break;
+          }
+        }
+      } else {
+        // No entities, just add as input_text
+        messageContent.push({ type: 'input_text', text: content });
+      }
 
       // Append additional content items (e.g., pasted text)
       if (messageOptions?.additionalContent) {

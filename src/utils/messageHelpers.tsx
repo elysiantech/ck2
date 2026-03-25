@@ -1,13 +1,5 @@
 import React from 'react';
-import type { Entity, EntityPreview } from '../types';
-
-interface EntityTagData {
-  briefName?: string;
-  title?: string;
-  type?: string;
-  subtitle?: string;
-  icon?: string;
-}
+import type { Entity, EntityPreview, EntityTagData } from '../types';
 
 // Render user message content (handles input_text and input_tag types)
 export function renderUserMessageContent(

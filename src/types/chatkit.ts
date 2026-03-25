@@ -48,7 +48,14 @@ export interface UserMessageItem {
 
 // Content types - what goes IN (user) vs OUT (assistant)
 export type InputTextContent = { type: 'input_text'; text: string };
-export type InputTagContent = { type: 'input_tag'; id: string; text: string; data?: Record<string, unknown> };
+export type InputTagContent = {
+  type: 'input_tag';
+  id: string;
+  text: string;
+  group?: string;
+  interactive?: boolean;
+  data?: Record<string, unknown>;
+};
 export type OutputTextContent = { type: 'output_text'; text: string; annotations?: Annotation[] };
 
 // UserMessageContent can be input_text or input_tag
@@ -70,6 +77,9 @@ export interface EntityTagData {
   type?: string;
   group?: string;
   interactive?: boolean;
+  briefName?: string;
+  subtitle?: string;
+  icon?: string;
 }
 
 export interface AssistantMessageItem {
@@ -617,6 +627,7 @@ export interface Entity {
   interactive?: boolean;
   icon?: string;
   subtitle?: string;
+  data?: Record<string, string>;
 }
 
 export interface EntityPreview {

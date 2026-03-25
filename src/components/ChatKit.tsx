@@ -42,6 +42,7 @@ export function ChatKit({ control, options }: ChatKitProps) {
   const [mentionResults, setMentionResults] = useState<Entity[]>([]);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionStartPos, setMentionStartPos] = useState<number>(0);
+  const [insertedEntities, setInsertedEntities] = useState<Map<string, Entity>>(new Map());
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Command/skill state (/)
@@ -65,6 +66,7 @@ export function ChatKit({ control, options }: ChatKitProps) {
   const [pasteCount, setPasteCount] = useState(0);
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const handleCopy = useCallback((itemId: string, text: string) => {
     navigator.clipboard.writeText(text);
@@ -231,6 +233,11 @@ export function ChatKit({ control, options }: ChatKitProps) {
     }
   }, []);
 
+  // Auto-scroll to bottom when new messages arrive or during streaming
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [state.items, state.isStreaming]);
+
   // Auto-resize when inputValue changes (handles paste)
   useEffect(() => {
     autoResizeTextarea();
@@ -269,9 +276,11 @@ export function ChatKit({ control, options }: ChatKitProps) {
   const insertMention = (entity: Entity) => {
     const before = inputValue.slice(0, mentionStartPos);
     const after = inputValue.slice(mentionStartPos + (mentionQuery?.length || 0) + 1);
-    // Insert a placeholder that we'll convert to input_tag when sending
-    const newValue = `${before}@[${entity.title}](entity:${entity.id})${after}`;
+    // Insert as plain @Title text
+    const newValue = `${before}@${entity.title}${after}`;
     setInputValue(newValue);
+    // Track the entity for later conversion to input_tag
+    setInsertedEntities(prev => new Map(prev).set(entity.title, entity));
     setMentionQuery(null);
     textareaRef.current?.focus();
   };
@@ -298,6 +307,7 @@ export function ChatKit({ control, options }: ChatKitProps) {
     sendMessage(inputValue.trim(), {
       attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
       additionalContent: pastedTexts.length > 0 ? pastedTexts.map(p => p.content) : undefined,
+      entities: insertedEntities.size > 0 ? insertedEntities : undefined,
     });
 
     setInputValue('');
@@ -305,6 +315,7 @@ export function ChatKit({ control, options }: ChatKitProps) {
     setPastedTexts([]);
     setPasteCount(0);
     setMentionQuery(null);
+    setInsertedEntities(new Map());
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -662,11 +673,16 @@ export function ChatKit({ control, options }: ChatKitProps) {
                           const isExpanded = expandedMessages.has(item.id);
                           const { truncated, isTruncated } = truncateText(fullText, MAX_PREVIEW_LINES);
 
+                          // Use original content (preserving input_tag items) unless truncated AND not expanded
+                          const contentToRender = (isTruncated && !isExpanded)
+                            ? [{ type: 'input_text', text: truncated }]
+                            : item.content;
+
                           return (
                             <>
                               <span className="text-gray-700 whitespace-pre-wrap">
                                 {renderUserMessageContent(
-                                  isExpanded ? item.content : [{ type: 'input_text', text: truncated }],
+                                  contentToRender,
                                   {
                                     onClick: options?.entities?.onClick,
                                     onRequestPreview: options?.entities?.onRequestPreview,
@@ -788,6 +804,7 @@ export function ChatKit({ control, options }: ChatKitProps) {
               {state.isStreaming && state.progressText && (
                 <div className="text-sm text-gray-500">{state.progressText}</div>
               )}
+              <div ref={messagesEndRef} />
             </div>
           )}
         </main>
@@ -837,29 +854,47 @@ export function ChatKit({ control, options }: ChatKitProps) {
             {/* Entity mention dropdown */}
             {mentionQuery !== null && mentionResults.length > 0 && (
               <div className="absolute bottom-full left-4 right-4 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto z-30">
-                <div className="px-3 py-2 text-xs text-gray-500 uppercase tracking-wide border-b border-gray-100">
-                  Mentions
-                </div>
-                {mentionResults.map((entity, i) => (
-                  <button
-                    key={entity.id}
-                    onClick={() => insertMention(entity)}
-                    className={`w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-50 ${
-                      i === mentionIndex ? 'bg-gray-100' : ''
-                    }`}
-                  >
-                    {entity.icon && <span className="text-lg">{entity.icon}</span>}
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-gray-900 truncate">{entity.title}</div>
-                      {entity.subtitle && (
-                        <div className="text-sm text-gray-500 truncate">{entity.subtitle}</div>
-                      )}
+                {(() => {
+                  // Group entities by their group field
+                  const grouped = mentionResults.reduce((acc, entity) => {
+                    const group = entity.group || 'Other';
+                    if (!acc[group]) acc[group] = [];
+                    acc[group].push(entity);
+                    return acc;
+                  }, {} as Record<string, Entity[]>);
+
+                  let flatIndex = 0;
+                  return Object.entries(grouped).map(([groupName, entities]) => (
+                    <div key={groupName}>
+                      <div className="px-3 py-2 text-xs text-gray-500 uppercase tracking-wide border-b border-gray-100">
+                        {groupName}
+                      </div>
+                      {entities.map((entity) => {
+                        const currentIndex = flatIndex++;
+                        return (
+                          <button
+                            key={entity.id}
+                            onClick={() => insertMention(entity)}
+                            className={`w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-50 ${
+                              currentIndex === mentionIndex ? 'bg-gray-100' : ''
+                            }`}
+                          >
+                            {entity.icon && <span className="text-lg">{entity.icon}</span>}
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-gray-900 truncate">{entity.title}</div>
+                              {entity.subtitle && (
+                                <div className="text-sm text-gray-500 truncate">{entity.subtitle}</div>
+                              )}
+                            </div>
+                            {entity.type && (
+                              <span className="text-xs text-gray-400 uppercase">{entity.type}</span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
-                    {entity.type && (
-                      <span className="text-xs text-gray-400 uppercase">{entity.type}</span>
-                    )}
-                  </button>
-                ))}
+                  ));
+                })()}
               </div>
             )}
 

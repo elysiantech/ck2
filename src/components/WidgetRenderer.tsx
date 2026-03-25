@@ -15,14 +15,25 @@ export function WidgetRenderer({ widget, itemId, onAction }: WidgetRendererProps
   if (!widget) return null;
 
   switch (widget.type) {
-    case 'Card':
+    case 'Card': {
+      // Respect padding and background properties from widget data
+      const cardWidget = widget as WidgetNode & { padding?: number; background?: string };
+      const hasPadding = cardWidget.padding !== 0;
+      const hasBackground = cardWidget.background !== 'transparent';
+      const showContainer = hasPadding || hasBackground;
+
+      const containerClasses = showContainer
+        ? 'inline-block border border-gray-200 rounded-lg p-5 bg-white space-y-4 max-w-sm'
+        : 'inline-block space-y-4';
+
       return (
-        <div className="inline-block border border-gray-200 rounded-lg p-5 bg-white space-y-4 max-w-sm">
+        <div className={containerClasses}>
           {widget.children?.map((child: WidgetNode, i: number) => (
             <WidgetRenderer key={i} widget={child} itemId={itemId} onAction={onAction} />
           ))}
         </div>
       );
+    }
 
     case 'Form': {
       const isSubmitted = widget.children?.some((child: WidgetNode) =>
@@ -129,7 +140,15 @@ export function WidgetRenderer({ widget, itemId, onAction }: WidgetRendererProps
         ? 'px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg'
         : 'px-6 py-2.5 bg-gray-800 text-white rounded-lg hover:bg-gray-700';
       return (
-        <button type={widget.submit ? 'submit' : 'button'} className={btnClasses}>
+        <button
+          type={widget.submit ? 'submit' : 'button'}
+          className={btnClasses}
+          onClick={() => {
+            if (widget.onClickAction && onAction) {
+              onAction(widget.onClickAction);
+            }
+          }}
+        >
           {widget.label}
         </button>
       );
