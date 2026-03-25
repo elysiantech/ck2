@@ -80,11 +80,7 @@ function buildHtmlDocument(widgetCode: string): string {
 
 /**
  * Sandboxed iframe component for rendering agent-generated widgets.
- * Supports Chart.js charts and vanilla JS/React components with auto-resize
- * and sendPrompt bridge for widget-to-chat communication.
- *
  * CSS variables are forwarded from the host page for consistent theming.
- * Re-render the iframe when theme changes to pick up new variable values.
  */
 export function IframeWidget({ code, onSendPrompt }: IframeWidgetProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -92,7 +88,6 @@ export function IframeWidget({ code, onSendPrompt }: IframeWidgetProps) {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Build the srcdoc HTML
   const srcdoc = buildHtmlDocument(code);
 
   // Copy widget as image to clipboard
@@ -101,47 +96,29 @@ export function IframeWidget({ code, onSendPrompt }: IframeWidgetProps) {
     if (!iframe?.contentDocument?.body) return;
 
     try {
-      // Check if this is a pure Chart.js widget (canvas only, minimal surrounding HTML)
-      const canvas = iframe.contentDocument.querySelector('canvas');
-      const bodyText = iframe.contentDocument.body.innerText.trim();
-      const isPureChart = code.includes('new Chart(') && canvas && bodyText.length < 50;
-
-      let blob: Blob;
-
-      if (isPureChart && canvas) {
-        // Pure Chart.js widget - grab canvas directly
-        blob = await new Promise<Blob>((resolve, reject) => {
-          canvas.toBlob(b => b ? resolve(b) : reject(new Error('Failed to capture canvas')), 'image/png');
-        });
-      } else {
-        // HTML widget or mixed - use html2canvas
-        const screenshotCanvas = await html2canvas(iframe.contentDocument.body, {
-          backgroundColor: '#ffffff',
-          scale: 2, // Higher quality
-        });
-        blob = await new Promise<Blob>((resolve, reject) => {
-          screenshotCanvas.toBlob(b => b ? resolve(b) : reject(new Error('Failed to capture')), 'image/png');
-        });
-      }
-
-      await navigator.clipboard.write([
-        new ClipboardItem({ 'image/png': blob })
-      ]);
-
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      const canvas = await html2canvas(iframe.contentDocument.body, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+      });
+      canvas.toBlob(async (blob) => {
+        if (blob) {
+          await navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': blob })
+          ]);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        }
+      }, 'image/png');
     } catch (err) {
       console.error('Failed to copy widget as image:', err);
     }
-  }, [code]);
+  }, []);
 
   // Listen for postMessage events from the iframe
   useEffect(() => {
     const handler = (event: MessageEvent) => {
-      // Only handle messages from our iframe
       if (iframeRef.current && event.source === iframeRef.current.contentWindow) {
         if (event.data?.type === 'resize' && typeof event.data.height === 'number') {
-          // Add some padding to avoid scrollbars
           setHeight(Math.max(event.data.height + 16, 100));
         }
         if (event.data?.type === 'sendPrompt' && typeof event.data.text === 'string') {
@@ -157,7 +134,6 @@ export function IframeWidget({ code, onSendPrompt }: IframeWidgetProps) {
     return () => window.removeEventListener('message', handler);
   }, [onSendPrompt]);
 
-  // Handle iframe load errors
   const handleError = useCallback(() => {
     setError('Failed to load widget');
   }, []);
