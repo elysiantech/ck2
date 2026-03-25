@@ -168,7 +168,7 @@ export interface WorkflowSource {
 // Attachment Types
 // ----------------------------------------------------------------------------
 
-export type Attachment = FileAttachment | ImageAttachment;
+export type Attachment = FileAttachment | ImageAttachment | TextAttachment;
 
 export interface FileAttachment {
   type: 'file';
@@ -190,6 +190,13 @@ export interface ImageAttachment {
   height?: number;
   upload_url?: string;
   preview_url?: string;
+}
+
+export interface TextAttachment {
+  type: 'text';
+  id: string;
+  name: string;
+  content: string;
 }
 
 export interface InferenceOptions {
@@ -372,12 +379,30 @@ export type ThreadStreamEvent =
   | ThreadItemAddedEvent
   | ThreadItemUpdatedEvent
   | ThreadItemDoneEvent
+  | ThreadItemRemovedEvent
+  | ThreadItemReplacedEvent
   | MessageDeltaEvent
   | WidgetDeltaEvent
+  | WidgetStreamingTextValueDeltaEvent
+  | WidgetRootUpdatedEvent
   | ProgressUpdateEvent
   | ClientEffectEvent
   | ErrorEvent
   | DoneEvent;
+
+export interface WidgetStreamingTextValueDeltaEvent {
+  type: 'widget.streaming_text.value_delta';
+  item_id: string;
+  component_id: string;
+  delta: string;
+  done: boolean;
+}
+
+export interface WidgetRootUpdatedEvent {
+  type: 'widget.root.updated';
+  item_id: string;
+  widget: WidgetRoot;
+}
 
 export interface ThreadCreatedEvent {
   type: 'thread.created';
@@ -401,11 +426,24 @@ export interface ThreadItemAddedEvent {
 
 export interface ThreadItemUpdatedEvent {
   type: 'thread.item.updated';
-  item: ThreadItem;
+  item_id: string;
+  update: ThreadItemUpdate;
+  // Legacy format support
+  item?: ThreadItem;
 }
 
 export interface ThreadItemDoneEvent {
   type: 'thread.item.done';
+  item: ThreadItem;
+}
+
+export interface ThreadItemRemovedEvent {
+  type: 'thread.item.removed';
+  item_id: string;
+}
+
+export interface ThreadItemReplacedEvent {
+  type: 'thread.item.replaced';
   item: ThreadItem;
 }
 
@@ -450,6 +488,37 @@ export interface ErrorEvent {
 export interface DoneEvent {
   type: 'done';
 }
+
+// Thread Item Update Types
+export interface WidgetStreamingTextValueDelta {
+  type: 'widget.streaming_text.value_delta';
+  component_id: string;
+  delta: string;
+  done: boolean;
+}
+
+export interface WidgetRootUpdated {
+  type: 'widget.root.updated';
+  widget: WidgetRoot;
+}
+
+export interface WidgetComponentUpdated {
+  type: 'widget.component.updated';
+  component_id: string;
+  component: unknown;
+}
+
+export interface AssistantMessageContentPartTextDelta {
+  type: 'assistant_message.content_part.text_delta';
+  content_index: number;
+  delta: string;
+}
+
+export type ThreadItemUpdate =
+  | AssistantMessageContentPartTextDelta
+  | WidgetStreamingTextValueDelta
+  | WidgetComponentUpdated
+  | WidgetRootUpdated;
 
 // ----------------------------------------------------------------------------
 // API Request/Response Types

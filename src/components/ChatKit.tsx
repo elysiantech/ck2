@@ -1,450 +1,18 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import type { ChatKitControl } from '../hooks/useChatKit';
-import type { ChatKitOptions, WidgetItem, WidgetNode, Entity, SkillMetadata, Workflow, Attachment } from '../types';
-
-// ============================================================================
-// Helper Functions (defined before component for hoisting)
-// ============================================================================
-
-// Render user message content (handles input_text and input_tag types)
-function renderUserMessageContent(
-  content: Array<{ type: string; text?: string; id?: string; data?: any }>,
-  entityCallbacks?: {
-    onClick?: (entity: Entity) => void;
-    onRequestPreview?: (entity: Entity) => Promise<{ title: string; content: string }>;
-  }
-): JSX.Element[] {
-  if (!content || !Array.isArray(content)) return [];
-  return content.map((c, i) => {
-    if (c.type === 'input_tag') {
-      // Entity tag - render in blue
-      const displayText = c.data?.briefName || c.data?.title || c.text || c.id;
-      const entity: Entity = {
-        id: c.id || '',
-        title: c.data?.title || c.text || c.id || '',
-        type: c.data?.type,
-        subtitle: c.data?.subtitle,
-        icon: c.data?.icon,
-      };
-      const handleClick = entityCallbacks?.onClick ? () => entityCallbacks.onClick!(entity) : undefined;
-      return (
-        <span
-          key={i}
-          className={`text-blue-600 ${handleClick ? 'cursor-pointer hover:underline' : ''}`}
-          onClick={handleClick}
-          onMouseEnter={() => entityCallbacks?.onRequestPreview?.(entity)}
-        >
-          @{displayText}
-        </span>
-      );
-    }
-    // Regular text
-    if ((c.type === 'input_text' || c.type === 'text') && c.text) {
-      return <span key={i}>{c.text}</span>;
-    }
-    return <span key={i}></span>;
-  });
-}
-
-// Extract text from assistant message content (handles output_text type)
-function extractAssistantMessageText(content: Array<{ type: string; text?: string }>): string {
-  if (!content || !Array.isArray(content)) return '';
-  return content
-    .map((c) => {
-      if (c.type === 'output_text' && c.text) return c.text;
-      if (c.type === 'text' && c.text) return c.text; // fallback
-      return '';
-    })
-    .join('');
-}
-
-// Markdown components for proper styling
-const markdownComponents = {
-  h1: ({ children }: any) => <h1 className="text-2xl font-medium mt-6 mb-3">{children}</h1>,
-  h2: ({ children }: any) => <h2 className="text-xl font-medium mt-5 mb-2">{children}</h2>,
-  h3: ({ children }: any) => <h3 className="text-lg font-medium mt-4 mb-2">{children}</h3>,
-  p: ({ children }: any) => <p className="mb-3 leading-relaxed">{children}</p>,
-  ul: ({ children }: any) => <ul className="list-disc pl-5 mb-3 space-y-1">{children}</ul>,
-  ol: ({ children }: any) => <ol className="list-decimal pl-5 mb-3 space-y-1">{children}</ol>,
-  li: ({ children }: any) => <li className="leading-relaxed">{children}</li>,
-  table: ({ children }: any) => (
-    <div className="overflow-x-auto my-4">
-      <table className="min-w-full border border-gray-200 rounded-lg">{children}</table>
-    </div>
-  ),
-  thead: ({ children }: any) => <thead className="bg-gray-50">{children}</thead>,
-  th: ({ children }: any) => <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 border-b border-gray-200">{children}</th>,
-  td: ({ children }: any) => <td className="px-4 py-2 text-sm text-gray-600 border-b border-gray-100">{children}</td>,
-  // In react-markdown v9+, code blocks are <pre><code>...</code></pre>
-  // Inline code is just <code>...</code>
-  // We use a wrapper component to detect if we're inside a pre
-  pre: ({ children }: any) => (
-    <pre className="bg-gray-50 p-4 rounded-lg overflow-x-auto my-3 text-sm font-mono [&>code]:bg-transparent [&>code]:p-0 [&>code]:rounded-none">
-      {children}
-    </pre>
-  ),
-  code: ({ children }: any) => (
-    <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono">{children}</code>
-  ),
-  blockquote: ({ children }: any) => <blockquote className="border-l-4 border-gray-300 pl-4 italic text-gray-600 my-3">{children}</blockquote>,
-  a: ({ href, children }: any) => <a href={href} className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>,
-  img: ({ src, alt }: any) => <img src={src} alt={alt || ''} className="max-w-full rounded-lg my-2" />,
-  hr: () => <hr className="my-4 border-gray-200" />,
-  strong: ({ children }: any) => <strong className="font-semibold">{children}</strong>,
-  em: ({ children }: any) => <em className="italic">{children}</em>,
-};
-
-function groupThreadsByTime(threads: Array<{ id: string; title?: string; updated_at: string }>): Array<{ label: string; threads: typeof threads }> {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const ninetyDaysAgo = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
-  const sixMonthsAgo = new Date(today.getTime() - 180 * 24 * 60 * 60 * 1000);
-  const oneYearAgo = new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000);
-
-  const todayThreads: typeof threads = [];
-  const last7: typeof threads = [];
-  const last30: typeof threads = [];
-  const last90: typeof threads = [];
-  const last6Months: typeof threads = [];
-  const aYearAgo: typeof threads = [];
-  const yearsAgo: typeof threads = [];
-
-  for (const thread of threads) {
-    const date = new Date(thread.updated_at);
-    // Handle invalid dates - default to today
-    if (isNaN(date.getTime()) || date >= today) {
-      todayThreads.push(thread);
-    } else if (date >= sevenDaysAgo) {
-      last7.push(thread);
-    } else if (date >= thirtyDaysAgo) {
-      last30.push(thread);
-    } else if (date >= ninetyDaysAgo) {
-      last90.push(thread);
-    } else if (date >= sixMonthsAgo) {
-      last6Months.push(thread);
-    } else if (date >= oneYearAgo) {
-      aYearAgo.push(thread);
-    } else {
-      yearsAgo.push(thread);
-    }
-  }
-
-  const groups: Array<{ label: string; threads: typeof threads }> = [];
-  if (todayThreads.length > 0) groups.push({ label: 'Today', threads: todayThreads });
-  if (last7.length > 0) groups.push({ label: 'Last 7 days', threads: last7 });
-  if (last30.length > 0) groups.push({ label: 'Last 30 days', threads: last30 });
-  if (last90.length > 0) groups.push({ label: 'Last 90 days', threads: last90 });
-  if (last6Months.length > 0) groups.push({ label: 'Last 6 months', threads: last6Months });
-  if (aYearAgo.length > 0) groups.push({ label: 'A year ago', threads: aYearAgo });
-  if (yearsAgo.length > 0) groups.push({ label: 'Years ago', threads: yearsAgo });
-
-  return groups;
-}
-
-// Widget renderer component - handles all ChatKit widget types
-interface WidgetRendererProps {
-  widget: any;
-  itemId?: string;
-  onAction?: (action: { type: string; payload?: unknown }) => void;
-}
-
-function WidgetRenderer({ widget, itemId, onAction }: WidgetRendererProps): JSX.Element | null {
-  if (!widget) return null;
-
-  switch (widget.type) {
-    case 'Card':
-      return (
-        <div className="inline-block border border-gray-200 rounded-lg p-5 bg-white space-y-4 max-w-sm">
-          {widget.children?.map((child: any, i: number) => (
-            <WidgetRenderer key={i} widget={child} itemId={itemId} onAction={onAction} />
-          ))}
-        </div>
-      );
-
-    case 'Form': {
-      const isSubmitted = widget.children?.some((child: any) =>
-        (child.type === 'RadioGroup' && child.value !== undefined) ||
-        (child.type === 'Checkbox' && child.checked !== undefined)
-      );
-      return (
-        <form
-          className={`flex ${widget.direction === 'col' ? 'flex-col' : 'flex-row'} gap-4`}
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (isSubmitted) return;
-            if (widget.onSubmitAction && onAction) {
-              const formData = new FormData(e.currentTarget);
-              const payload: Record<string, string> = {};
-              formData.forEach((value, key) => {
-                payload[key] = value.toString();
-              });
-              onAction({
-                type: widget.onSubmitAction.type,
-                payload,
-              });
-            }
-          }}
-        >
-          {widget.children?.map((child: any, i: number) => (
-            <WidgetRenderer key={i} widget={child} itemId={itemId} onAction={onAction} />
-          ))}
-        </form>
-      );
-    }
-
-    case 'Text':
-      const textClasses = [
-        'text-gray-700',
-        widget.weight === 'bold' ? 'font-medium' : '',
-        widget.size === 'sm' ? 'text-sm' : widget.size === 'lg' ? 'text-lg' : '',
-      ].filter(Boolean).join(' ');
-      return <span className={textClasses}>{widget.value}</span>;
-
-    case 'Markdown':
-      return (
-        <div className="text-gray-700">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-            {widget.value || ''}
-          </ReactMarkdown>
-        </div>
-      );
-
-    case 'Title':
-      const TitleTag = `h${widget.level || 2}` as keyof JSX.IntrinsicElements;
-      return <TitleTag className="font-medium text-gray-700">{widget.value}</TitleTag>;
-
-    case 'RadioGroup': {
-      const hasValue = widget.value !== undefined;
-      return (
-        <div className={`flex ${widget.direction === 'col' ? 'flex-col' : 'flex-row'} gap-3`}>
-          {widget.options?.map((opt: { label: string; value: string }, i: number) => (
-            <label key={i} className={`flex items-start gap-3 ${hasValue ? 'cursor-default' : 'cursor-pointer'}`}>
-              <input
-                type="radio"
-                name={widget.name}
-                value={opt.value}
-                defaultChecked={widget.value === opt.value}
-                disabled={hasValue}
-                className="mt-0.5 w-4 h-4 accent-black"
-              />
-              <span className="text-gray-700 leading-snug">{opt.label}</span>
-            </label>
-          ))}
-        </div>
-      );
-    }
-
-    case 'Checkbox': {
-      const isLocked = widget.checked !== undefined;
-      return (
-        <label className={`flex items-center gap-3 ${isLocked ? 'cursor-default' : 'cursor-pointer'}`}>
-          <input
-            type="checkbox"
-            name={widget.name}
-            defaultChecked={widget.checked}
-            disabled={isLocked}
-            className="w-4 h-4 accent-black"
-          />
-          <span className="text-gray-700">{widget.label}</span>
-        </label>
-      );
-    }
-
-    case 'Button':
-      const btnVariant = widget.variant || 'primary';
-      const btnClasses = btnVariant === 'outline'
-        ? 'px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50'
-        : btnVariant === 'ghost'
-        ? 'px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg'
-        : 'px-6 py-2.5 bg-gray-800 text-white rounded-lg hover:bg-gray-700';
-      return (
-        <button type={widget.submit ? 'submit' : 'button'} className={btnClasses}>
-          {widget.label}
-        </button>
-      );
-
-    case 'Image':
-      return <img src={widget.src} alt={widget.alt || ''} className="max-w-full rounded-lg" />;
-
-    case 'Stack':
-      const gapClass = widget.gap ? `gap-${widget.gap}` : 'gap-3';
-      return (
-        <div className={`flex ${widget.direction === 'col' ? 'flex-col' : 'flex-row'} ${gapClass}`}>
-          {widget.children?.map((child: any, i: number) => (
-            <WidgetRenderer key={i} widget={child} itemId={itemId} onAction={onAction} />
-          ))}
-        </div>
-      );
-
-    case 'Divider':
-      return <hr className="my-3 border-gray-200" />;
-
-    case 'CodeBlock':
-      return (
-        <pre className="bg-gray-50 p-4 rounded-lg overflow-x-auto text-sm border border-gray-200">
-          <code>{widget.code}</code>
-        </pre>
-      );
-
-    case 'Link':
-      return (
-        <a href={widget.href} target={widget.target || '_blank'} className="text-gray-900 underline hover:text-gray-600">
-          {widget.text}
-        </a>
-      );
-
-    case 'Badge':
-      const badgeColors: Record<string, string> = {
-        gray: 'bg-gray-100 text-gray-700',
-        blue: 'bg-blue-100 text-blue-700',
-        green: 'bg-green-100 text-green-700',
-        yellow: 'bg-yellow-100 text-yellow-700',
-        red: 'bg-red-100 text-red-700',
-        purple: 'bg-purple-100 text-purple-700',
-      };
-      return (
-        <span className={`px-2 py-1 rounded text-xs font-medium ${badgeColors[widget.color || 'gray']}`}>
-          {widget.text}
-        </span>
-      );
-
-    case 'Select':
-      return (
-        <select
-          name={widget.name}
-          defaultValue={widget.value}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-200"
-        >
-          {widget.placeholder && <option value="">{widget.placeholder}</option>}
-          {widget.options?.map((opt: { label: string; value: string }, i: number) => (
-            <option key={i} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
-      );
-
-    default:
-      // For unknown types, try to render children if they exist
-      if (widget.children && Array.isArray(widget.children)) {
-        return (
-          <div>
-            {widget.children.map((child: any, i: number) => (
-              <WidgetRenderer key={i} widget={child} itemId={itemId} onAction={onAction} />
-            ))}
-          </div>
-        );
-      }
-      return null;
-  }
-}
-
-// Workflow display component with collapsible behavior
-interface WorkflowDisplayProps {
-  workflow: Workflow;
-  expanded?: boolean;
-}
-
-function WorkflowDisplay({ workflow, expanded: initialExpanded }: WorkflowDisplayProps) {
-  const [isExpanded, setIsExpanded] = useState(initialExpanded ?? false);
-  const hasTasks = workflow.tasks && workflow.tasks.length > 0;
-
-  return (
-    <div className="py-2">
-      {/* Collapsible header */}
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center gap-1 text-gray-500 text-sm hover:text-gray-700 transition-colors"
-      >
-        <span>{workflow.summary || 'Thought for a while'}</span>
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-        >
-          <path d="M7.52925 3.7793C7.75652 3.55203 8.10803 3.52383 8.36616 3.69434L8.47065 3.7793L14.2207 9.5293C14.4804 9.789 14.4804 10.211 14.2207 10.4707L8.47065 16.2207C8.21095 16.4804 7.78895 16.4804 7.52925 16.2207C7.26955 15.961 7.26955 15.539 7.52925 15.2793L12.8085 10L7.52925 4.7207L7.44429 4.61621C7.27378 4.35808 7.30198 4.00657 7.52925 3.7793Z"/>
-        </svg>
-      </button>
-
-      {/* Expandable content */}
-      {isExpanded && hasTasks && (
-        <div className="mt-3">
-          {workflow.tasks.map((task, idx) => {
-            // Never "last" since Done is always shown below
-            const isLast = false;
-            return (
-              <div key={idx} className="flex">
-                {/* Timeline column with icon and vertical line */}
-                <div className="flex flex-col items-center mr-3">
-                  <div className="flex-shrink-0">
-                    {task.status_indicator === 'in_progress' ? (
-                      <svg className="animate-spin text-gray-400" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M8 1a7 7 0 1 0 7 7h-1A6 6 0 1 1 8 2V1z"/>
-                      </svg>
-                    ) : (
-                      <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" className="text-gray-400">
-                        <path d="M8 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM3 8a5 5 0 1 1 10 0A5 5 0 0 1 3 8Zm7.038-2.034a.5.5 0 0 1 .12.697l-2.374 3.375a.5.5 0 0 1-.779.048l-1.25-1.375a.5.5 0 0 1 .74-.672l.83.913 2.016-2.865a.5.5 0 0 1 .697-.12Z"/>
-                      </svg>
-                    )}
-                  </div>
-                  {/* Vertical connecting line */}
-                  {!isLast && <div className="w-px flex-1 bg-gray-200 my-1" />}
-                </div>
-                {/* Task content */}
-                <div className="min-w-0 flex-1 pb-4">
-                  {task.title && (
-                    <div className="text-sm workflow-task-content">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{task.title}</ReactMarkdown>
-                    </div>
-                  )}
-                  {task.content && (
-                    <div className="text-sm text-gray-600 mt-1 workflow-task-content">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{task.content}</ReactMarkdown>
-                    </div>
-                  )}
-                  {task.sources && task.sources.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {task.sources.map((source, sidx) => (
-                        <div key={sidx} className="inline-flex items-center gap-1.5 px-2 py-1 text-xs text-gray-600 bg-gray-100 rounded-md border border-gray-200">
-                          {source.type === 'url' ? (
-                            /* URL/citation icon */
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 text-gray-400">
-                              <path d="M12.823 4.164a6.5 6.5 0 0 1 8.354 9.932l-2.121 2.121a1 1 0 0 1-1.414-1.414l2.12-2.121a4.5 4.5 0 1 0-6.363-6.364l-2.122 2.121a1 1 0 0 1-1.414-1.414l2.122-2.121a6.5 6.5 0 0 1 .838-.74Zm-1.646 16.672a6.5 6.5 0 0 1-8.354-9.932l2.121-2.121a1 1 0 0 1 1.414 1.414l-2.12 2.121a4.5 4.5 0 1 0 6.363 6.364l2.122-2.121a1 1 0 1 1 1.414 1.414l-2.122 2.121a6.5 6.5 0 0 1-.838.74ZM8.464 15.536a1 1 0 0 1 0-1.414l5.657-5.657a1 1 0 0 1 1.414 1.414l-5.657 5.657a1 1 0 0 1-1.414 0Z"/>
-                            </svg>
-                          ) : (
-                            /* File icon */
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 text-gray-400">
-                              <path fillRule="evenodd" d="M7 2a3 3 0 0 0-3 3v14a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8.828a3 3 0 0 0-.879-2.12l-3.828-3.83A3 3 0 0 0 13.172 2H7Zm5 2H7a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-9h-3a3 3 0 0 1-3-3V4Zm5.586 4H15a1 1 0 0 1-1-1V4.414L17.586 8Z" clipRule="evenodd"/>
-                            </svg>
-                          )}
-                          <span className="line-clamp-1">{source.filename || source.title || source.url}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Done indicator - always shown */}
-          <div className="flex">
-            <div className="flex flex-col items-center mr-3">
-              <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" className="text-gray-400">
-                <path d="M8 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM3 8a5 5 0 1 1 10 0A5 5 0 0 1 3 8Zm7.038-2.034a.5.5 0 0 1 .12.697l-2.374 3.375a.5.5 0 0 1-.779.048l-1.25-1.375a.5.5 0 0 1 .74-.672l.83.913 2.016-2.865a.5.5 0 0 1 .697-.12Z"/>
-              </svg>
-            </div>
-            <div className="min-w-0 flex-1 text-sm">Done</div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+import type { ChatKitOptions, Entity, SkillMetadata, Attachment, TextAttachment } from '../types';
+import { WidgetRenderer } from './WidgetRenderer';
+import { WorkflowDisplay } from './WorkflowDisplay';
+import {
+  renderUserMessageContent,
+  truncateText,
+  extractUserMessageText,
+  extractAssistantMessageText,
+  renderAssistantContent,
+  markdownComponents,
+  groupThreadsByTime,
+  MAX_PREVIEW_LINES,
+} from '../utils/messageHelpers';
 
 // ============================================================================
 // Main Component
@@ -493,6 +61,9 @@ export function ChatKit({ control, options }: ChatKitProps) {
   // Attachment state
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
   const [uploadingCount, setUploadingCount] = useState(0);
+  const [pastedTexts, setPastedTexts] = useState<Array<{ id: string; name: string; content: string }>>([]);
+  const [pasteCount, setPasteCount] = useState(0);
+  const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleCopy = useCallback((itemId: string, text: string) => {
@@ -527,6 +98,44 @@ export function ChatKit({ control, options }: ChatKitProps) {
     }
   }, [uploadAttachment]);
 
+  // Handle paste events: images → upload, 3+ line text → placeholder
+  const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData.items;
+
+    // Check for images first - upload as attachment
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const blob = item.getAsFile();
+        if (blob) {
+          setUploadingCount(c => c + 1);
+          try {
+            const attachment = await uploadAttachment(blob);
+            setPendingAttachments(prev => [...prev, attachment]);
+          } finally {
+            setUploadingCount(c => c - 1);
+          }
+        }
+        return;
+      }
+    }
+
+    // Check for text with 3+ lines - add as attachment pill
+    const text = e.clipboardData.getData('text/plain');
+    const lines = text.split('\n');
+    if (lines.length >= 3) {
+      e.preventDefault();
+      const id = crypto.randomUUID();
+      const newCount = pasteCount + 1;
+      const label = `Pasted text ${newCount}`;
+
+      // Add as pasted text (shown as pill below input)
+      setPastedTexts(prev => [...prev, { id, name: label, content: text }]);
+      setPasteCount(newCount);
+    }
+    // Otherwise, let default paste behavior happen (1-2 lines inline)
+  }, [uploadAttachment, pasteCount]);
+
   // Remove a pending attachment
   const removeAttachment = useCallback((attachmentId: string) => {
     setPendingAttachments(prev => prev.filter(a => a.id !== attachmentId));
@@ -535,6 +144,11 @@ export function ChatKit({ control, options }: ChatKitProps) {
       console.error('[ChatKit] Failed to delete attachment from server:', err);
     });
   }, [deleteAttachment]);
+
+  // Remove a pasted text attachment
+  const removePastedText = useCallback((id: string) => {
+    setPastedTexts(prev => prev.filter(p => p.id !== id));
+  }, []);
 
   // Fetch skills when needed (panel opened or / typed)
   const fetchSkills = useCallback(async () => {
@@ -608,6 +222,20 @@ export function ChatKit({ control, options }: ChatKitProps) {
     }
   }, [mentionQuery, options?.entities?.onTagSearch]);
 
+  // Auto-resize textarea to fit content
+  const autoResizeTextarea = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+    }
+  }, []);
+
+  // Auto-resize when inputValue changes (handles paste)
+  useEffect(() => {
+    autoResizeTextarea();
+  }, [inputValue, autoResizeTextarea]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     const cursorPos = e.target.selectionStart;
@@ -664,11 +292,18 @@ export function ChatKit({ control, options }: ChatKitProps) {
   };
 
   const handleSend = () => {
-    const hasContent = inputValue.trim() || pendingAttachments.length > 0;
+    const hasContent = inputValue.trim() || pendingAttachments.length > 0 || pastedTexts.length > 0;
     if (!hasContent || state.isStreaming) return;
-    sendMessage(inputValue, { attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined });
+
+    sendMessage(inputValue.trim(), {
+      attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
+      additionalContent: pastedTexts.length > 0 ? pastedTexts.map(p => p.content) : undefined,
+    });
+
     setInputValue('');
     setPendingAttachments([]);
+    setPastedTexts([]);
+    setPasteCount(0);
     setMentionQuery(null);
   };
 
@@ -973,12 +608,12 @@ export function ChatKit({ control, options }: ChatKitProps) {
                       {/* Attachments */}
                       {item.attachments && item.attachments.length > 0 && (
                         <div className="flex flex-wrap justify-end gap-2 max-w-[85%]">
-                          {item.attachments.map((attachment, idx) => {
+                          {item.attachments.filter((a): a is Exclude<typeof a, TextAttachment> => a.type !== 'text').map((attachment, idx) => {
                             const isPdf = attachment.mime_type === 'application/pdf';
                             const isImage = attachment.type === 'image' || attachment.mime_type?.startsWith('image/');
                             const fileExt = attachment.name?.split('.').pop()?.toUpperCase() || 'FILE';
 
-                            if (isImage && attachment.preview_url) {
+                            if (isImage && 'preview_url' in attachment && attachment.preview_url) {
                               return (
                                 <div key={idx} className="overflow-hidden rounded-xl">
                                   <div className="w-[120px] h-[120px]">
@@ -1022,28 +657,63 @@ export function ChatKit({ control, options }: ChatKitProps) {
                       )}
                       {/* Message text */}
                       <div className="bg-gray-100 rounded-lg px-4 py-2 max-w-[85%]">
-                        <span className="text-gray-700">{renderUserMessageContent(item.content, {
-                          onClick: options?.entities?.onClick,
-                          onRequestPreview: options?.entities?.onRequestPreview,
-                        })}</span>
+                        {(() => {
+                          const fullText = extractUserMessageText(item.content);
+                          const isExpanded = expandedMessages.has(item.id);
+                          const { truncated, isTruncated } = truncateText(fullText, MAX_PREVIEW_LINES);
+
+                          return (
+                            <>
+                              <span className="text-gray-700 whitespace-pre-wrap">
+                                {renderUserMessageContent(
+                                  isExpanded ? item.content : [{ type: 'input_text', text: truncated }],
+                                  {
+                                    onClick: options?.entities?.onClick,
+                                    onRequestPreview: options?.entities?.onRequestPreview,
+                                  }
+                                )}
+                              </span>
+                              {isTruncated && !isExpanded && (
+                                <button
+                                  onClick={() => setExpandedMessages(prev => new Set(prev).add(item.id))}
+                                  className="block mt-2 text-sm text-gray-900 hover:underline w-full text-right"
+                                >
+                                  Show more
+                                </button>
+                              )}
+                              {isTruncated && isExpanded && (
+                                <button
+                                  onClick={() => setExpandedMessages(prev => {
+                                    const next = new Set(prev);
+                                    next.delete(item.id);
+                                    return next;
+                                  })}
+                                  className="block mt-2 text-sm text-gray-900 hover:underline w-full text-right"
+                                >
+                                  Show less
+                                </button>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
                   )}
                   {item.type === 'assistant_message' && (
                     <div>
                       <div className={`${state.isStreaming && item.status === 'in_progress' ? 'streaming-cursor' : ''}`}>
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          components={markdownComponents}
-                        >
-                          {extractAssistantMessageText(item.content)}
-                        </ReactMarkdown>
+                        {renderAssistantContent(
+                          extractAssistantMessageText(item.content),
+                          (text) => sendMessage(text),
+                          state.isStreaming && item.status === 'in_progress',
+                          markdownComponents
+                        )}
                       </div>
                       {/* Action icons - only show at end of assistant turn */}
                       {item.status !== 'in_progress' && isLastInAssistantTurn && (
                         <div className="flex items-center gap-1 mt-2">
                           <button
-                            onClick={() => handleCopy(item.id, extractAssistantMessageText(item.content))}
+                            onClick={() => handleCopy(item.id, extractAssistantMessageText(item.content).replace(/```widget\n[\s\S]*?```/g, '').trim())}
                             className="p-1.5 text-gray-400 hover:text-gray-500 hover:bg-gray-100 rounded"
                             aria-label="Copy"
                           >
@@ -1213,7 +883,7 @@ export function ChatKit({ control, options }: ChatKitProps) {
             {/* Pending attachments display */}
             {pendingAttachments.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-2">
-                {pendingAttachments.map((attachment) => {
+                {pendingAttachments.filter((a): a is Exclude<typeof a, TextAttachment> => a.type !== 'text').map((attachment) => {
                   const isPdf = attachment.mime_type === 'application/pdf';
                   const isImage = attachment.type === 'image' || attachment.mime_type?.startsWith('image/');
                   const ext = attachment.name?.split('.').pop()?.toLowerCase() || '';
@@ -1244,7 +914,7 @@ export function ChatKit({ control, options }: ChatKitProps) {
                   }
 
                   // For images, show thumbnail preview
-                  if (isImage && attachment.preview_url) {
+                  if (isImage && 'preview_url' in attachment && attachment.preview_url) {
                     return (
                       <div key={attachment.id} className="relative">
                         <div className="w-16 h-16 rounded-xl overflow-hidden border border-gray-200">
@@ -1335,6 +1005,41 @@ export function ChatKit({ control, options }: ChatKitProps) {
               </div>
             )}
 
+            {/* Pasted text cards */}
+            {pastedTexts.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {pastedTexts.map((paste) => (
+                  <div key={paste.id} className="relative flex items-center gap-3 px-3 py-2.5 bg-white border border-gray-200 rounded-xl min-w-[180px] max-w-[280px]">
+                    {/* Clipboard icon */}
+                    <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-lg bg-gray-700 text-gray-300">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1s-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1z"/>
+                      </svg>
+                    </div>
+                    {/* Paste info */}
+                    <div className="overflow-hidden flex-1">
+                      <div className="text-sm text-gray-700 truncate" title={paste.name}>
+                        {paste.name}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        Pasted text
+                      </div>
+                    </div>
+                    {/* Remove button */}
+                    <button
+                      onClick={() => removePastedText(paste.id)}
+                      className="absolute -top-2 -right-2 w-5 h-5 bg-gray-800 text-white rounded-full flex items-center justify-center hover:bg-gray-700"
+                      aria-label="Remove pasted text"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M4 4l8 8M12 4l-8 8"/>
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-4 py-2 border border-gray-200">
               <button
                 onClick={() => fileInputRef.current?.click()}
@@ -1351,9 +1056,10 @@ export function ChatKit({ control, options }: ChatKitProps) {
                 value={inputValue}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
                 placeholder={options?.composer?.placeholder || 'Describe what you want to do'}
                 rows={1}
-                className="flex-1 bg-transparent border-none resize-none focus:outline-none text-gray-900 placeholder-gray-400 py-1.5 text-sm"
+                className="flex-1 bg-transparent border-none resize-none focus:outline-none text-gray-900 placeholder-gray-400 py-1.5 text-sm overflow-y-auto"
                 style={{ minHeight: '24px', maxHeight: '120px' }}
               />
 
@@ -1370,7 +1076,7 @@ export function ChatKit({ control, options }: ChatKitProps) {
               ) : (
                 <button
                   onClick={handleSend}
-                  disabled={!inputValue.trim() && pendingAttachments.length === 0}
+                  disabled={!inputValue.trim() && pendingAttachments.length === 0 && pastedTexts.length === 0}
                   className="p-1.5 bg-black text-white rounded-lg disabled:opacity-30"
                   aria-label="Send"
                 >

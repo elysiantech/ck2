@@ -50,6 +50,7 @@ export interface ChatKitControl {
 
 export interface SendMessageOptions {
   attachments?: Attachment[];
+  additionalContent?: string[];  // Additional input_text items (e.g., pasted text)
   quotedText?: string;
   inferenceOptions?: InferenceOptions;
   context?: Record<string, unknown>;
@@ -353,9 +354,10 @@ export function useChatKit(options: ChatKitOptions): { control: ChatKitControl }
             }
             // Fallback: old format with item
             if (!event.item) return prev;
+            const eventItem = event.item;
             return {
               ...prev,
-              items: prev.items.map((i) => (i.id === event.item.id ? event.item : i)),
+              items: prev.items.map((i) => (i.id === eventItem.id ? eventItem : i)),
             };
           }
 
@@ -474,6 +476,13 @@ export function useChatKit(options: ChatKitOptions): { control: ChatKitControl }
 
       // Build content array with correct input_text type
       const messageContent: ContentPart[] = [{ type: 'input_text', text: content }];
+
+      // Append additional content items (e.g., pasted text)
+      if (messageOptions?.additionalContent) {
+        for (const text of messageOptions.additionalContent) {
+          messageContent.push({ type: 'input_text', text });
+        }
+      }
 
       // Add user message optimistically
       const tempUserMessage: ThreadItem = {
