@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { ChatKit, ResizablePanel } from './components';
 import { useChatKit } from './hooks';
 import type { Entity } from './types';
@@ -63,6 +64,14 @@ function App() {
       },
     },
   });
+
+  // Load saved thread on mount
+  useEffect(() => {
+    const savedThreadId = localStorage.getItem('ck2_last_thread');
+    if (savedThreadId) {
+      control.selectThread(savedThreadId);
+    }
+  }, []);
 
   return (
     <div className="h-screen w-screen bg-gray-100 flex items-center justify-center p-4">

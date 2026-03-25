@@ -839,23 +839,7 @@ export function useChatKit(options: ChatKitOptions): { control: ChatKitControl }
   // --------------------------------------------------------------------------
 
   useEffect(() => {
-    const init = async () => {
-      // Load threads first
-      await refreshThreads();
-
-      // Check if saved thread still exists before restoring
-      const savedThreadId = localStorage.getItem('ck2_last_thread');
-      if (savedThreadId) {
-        const threads = await apiRef.current?.listThreads({ limit: 50, order: 'desc' });
-        const exists = threads?.data.some((t) => t.id === savedThreadId);
-        if (exists) {
-          await selectThread(savedThreadId);
-        } else {
-          localStorage.removeItem('ck2_last_thread');
-        }
-      }
-    };
-    init();
+    refreshThreads();
   }, []);
 
   // --------------------------------------------------------------------------
