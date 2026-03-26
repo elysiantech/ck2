@@ -1,13 +1,15 @@
-import { ChatKit, ResizablePanel } from '../components';
-import { useChatKit } from '../hooks';
-import { buildShareableHtml } from '../utils/widgetShare';
+'use client';
 
-const WORKFLOW_ID = 'wf_69c369b94cec8190aa28c8918ea389490c2f4865c660087c';
+import { ChatKit, ResizablePanel } from '@/lib/chatkit/components';
+import { useChatKit } from '@/lib/chatkit/hooks';
+import { buildShareableHtml } from '@/lib/chatkit/utils/widgetShare';
 
-export function WidgetEmbed() {
+const WORKFLOW_ID = process.env.NEXT_PUBLIC_WORKFLOW_ID!;
+
+export default function Home() {
   const { control } = useChatKit({
     api: {
-      url: '/api/chatkit/chat',
+      url: '/api/chat',
       headers: {
         'x-page-context': JSON.stringify({ workflowId: WORKFLOW_ID }),
       },
@@ -15,7 +17,7 @@ export function WidgetEmbed() {
   });
 
   return (
-    <div className="h-screen w-screen bg-gray-100 flex items-center justify-center p-4">
+    <main className="h-screen w-screen bg-gray-100 flex items-center justify-center p-4">
       <ResizablePanel>
         <ChatKit
           control={control}
@@ -25,17 +27,11 @@ export function WidgetEmbed() {
             composer: {
               attachments: { enabled: false },
             },
-            // No entities.onTagSearch -> @ mentions won't show
-            // No skills -> / commands won't show
             startScreen: {
               greeting: "What process are you looking to automate?",
             },
             widgets: {
-              onShare: async ({ widgetCode, cssVars, widgetId, threadId }) => {
-                // TODO: Email capture modal before download
-                // TODO: Log lead
-                console.log('[WidgetEmbed] Share:', { widgetId, threadId });
-
+              onShare: async ({ widgetCode, cssVars, widgetId }) => {
                 const html = buildShareableHtml(widgetCode, cssVars);
                 const blob = new Blob([html], { type: 'text/html' });
                 const url = URL.createObjectURL(blob);
@@ -54,6 +50,6 @@ export function WidgetEmbed() {
           }}
         />
       </ResizablePanel>
-    </div>
+    </main>
   );
 }

@@ -647,6 +647,7 @@ export interface ChatKitOptions {
   history?: HistoryOptions;
   entities?: EntitiesOptions;
   widgets?: WidgetsOptions;
+  skills?: SkillsOptions;
 
   // Client tool execution (server requests client-side tool execution)
   onClientTool?: (params: {
@@ -727,6 +728,10 @@ export interface StartScreenPrompt {
 }
 
 export interface HistoryOptions {
+  enabled?: boolean;
+}
+
+export interface SkillsOptions {
   enabled?: boolean;
 }
 

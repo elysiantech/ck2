@@ -1,73 +1,51 @@
-# React + TypeScript + Vite
+# Fexel Advisor
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+AI-powered automation advisor for manufacturers. Guides you from "I don't know where to start" to a concrete labor analysis and ROI model — through conversation, not forms. Builds interactive widgets in real time as the picture comes together.
 
-Currently, two official plugins are available:
+## Setup
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Add your OpenAI key to `.env`:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
 ```
+OPENAI_API_KEY=sk-...
+```
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+## Greeting & Starter Prompts
+
+**Greeting:** "What's the biggest headache on your floor right now?"
+
+**Starter prompts (draft):**
+- "We're running ___ machines and can't keep people..."
+- "Our biggest safety issue is..."
+- "I just took over and don't know where to start..."
+- "We spend all day moving material between..."
+
+## Test Prompts
+
+**Rich input — skip intake entirely**
+
+> We run a machine tending operation — 4 CNC mills, 2 operators per shift, 3 shifts a day, 5 days a week. Fully loaded labor is about $58/hr. Parts are aluminum housings, pretty consistent geometry, cycle time is around 4 minutes per part. We're losing people constantly and I'm tired of it.
+
+No questions needed. You gave it everything — it should build the labor snapshot widget immediately with your real numbers.
+
+**Vague, emotionally driven**
+
+> We have forklifts moving material all day between our warehouse and production floor. Half my accidents are forklift related. I don't even care about the cost savings — I just want people to stop getting hurt.
+
+This is a safety conversation, not a finance conversation. It should reflect that back, ask one question to size the problem, then build something that leads with safety impact before touching ROI.
+
+**Blank sheet of paper**
+
+> I know I need to automate something. My dad built this business and I've taken over and labor is just getting impossible. I don't even know where to start.
+
+One warm sentence, one question — "what does a typical day look like on your floor?" No premature widget. Get one anchor before estimating anything, then build fast once you have it.

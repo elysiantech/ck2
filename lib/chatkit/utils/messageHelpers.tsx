@@ -80,7 +80,7 @@ interface AnchorProps extends ChildrenProps {
 }
 
 interface ImageProps {
-  src?: string;
+  src?: string | Blob;
   alt?: string;
 }
 
@@ -114,7 +114,7 @@ export const markdownComponents = {
   ),
   blockquote: ({ children }: ChildrenProps) => <blockquote className="border-l-4 border-gray-300 pl-4 italic text-gray-600 my-3">{children}</blockquote>,
   a: ({ href, children }: AnchorProps) => <a href={href} className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>,
-  img: ({ src, alt }: ImageProps) => <img src={src} alt={alt || ''} className="max-w-full rounded-lg my-2" />,
+  img: ({ src, alt }: ImageProps) => <img src={typeof src === 'string' ? src : undefined} alt={alt || ''} className="max-w-full rounded-lg my-2" />,
   hr: () => <hr className="my-4 border-gray-200" />,
   strong: ({ children }: ChildrenProps) => <strong className="font-semibold">{children}</strong>,
   em: ({ children }: ChildrenProps) => <em className="italic">{children}</em>,

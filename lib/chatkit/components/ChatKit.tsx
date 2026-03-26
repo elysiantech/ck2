@@ -292,17 +292,18 @@ export function ChatKit({ control, options, registerComposer }: ChatKitProps) {
 
     const textBeforeCursor = value.slice(0, cursorPos);
 
-    // Check for / command (at start of line or after space)
-    const slashMatch = textBeforeCursor.match(/(?:^|\s)\/([^\s]*)$/);
-    if (slashMatch) {
-      setCommandQuery(slashMatch[1]);
-      setCommandStartPos(cursorPos - slashMatch[1].length - 1);
-      setMentionQuery(null); // Close mention menu if open
-      // Fetch skills when / is typed
-      fetchSkills();
-      return;
-    } else {
-      setCommandQuery(null);
+    // Check for / command (only if skills are enabled)
+    if (options?.skills?.enabled) {
+      const slashMatch = textBeforeCursor.match(/(?:^|\s)\/([^\s]*)$/);
+      if (slashMatch) {
+        setCommandQuery(slashMatch[1]);
+        setCommandStartPos(cursorPos - slashMatch[1].length - 1);
+        setMentionQuery(null); // Close mention menu if open
+        fetchSkills();
+        return;
+      } else {
+        setCommandQuery(null);
+      }
     }
 
     // Check for @ mention
@@ -548,16 +549,18 @@ export function ChatKit({ control, options, registerComposer }: ChatKitProps) {
                     <path fillRule="evenodd" d="M2.954 7.807A1 1 0 0 0 3.968 9c.064.002.13-.003.196-.014l3-.5a1 1 0 0 0-.328-1.972l-.778.13a8 8 0 1 1-2.009 6.247 1 1 0 0 0-1.988.219C2.614 18.11 6.852 22 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2a9.975 9.975 0 0 0-7.434 3.312l-.08-.476a1 1 0 0 0-1.972.328l.44 2.643ZM12 7a1 1 0 0 1 1 1v3.586l2.207 2.207a1 1 0 0 1-1.414 1.414l-2.5-2.5A1 1 0 0 1 11 12V8a1 1 0 0 1 1-1Z" clipRule="evenodd"/>
                   </svg>
                 </button>
-                <button
-                  onClick={toggleSkillsPanel}
-                  className="p-2 hover:bg-gray-100 rounded-full"
-                  aria-label="Skills"
-                >
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
-                    <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
-                  </svg>
-                </button>
+                {options?.skills?.enabled && (
+                  <button
+                    onClick={toggleSkillsPanel}
+                    className="p-2 hover:bg-gray-100 rounded-full"
+                    aria-label="Skills"
+                  >
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+                    </svg>
+                  </button>
+                )}
               </div>
             </header>
 

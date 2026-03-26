@@ -1,58 +1,13 @@
-/**
- * ChatKit Lite - API Route
- *
- * Complete route handler for ChatKit protocol.
- *
- * SETUP REQUIRED:
- * 1. Copy chatkit-lite/ directory to your project
- * 2. Run schema.sql in your Postgres database
- * 3. Set environment variables:
- *    - OPENAI_API_KEY (required)
- *    - POSTGRES_URL (for @vercel/postgres)
- *    - WIDGET_API_KEY (optional, for auth)
- * 4. Update WORKFLOW_ID below with your hosted workflow ID
- * 5. Copy this file to: app/api/chat/route.ts
- * 6. Update imports to match your project structure
- */
-
 import { NextRequest, NextResponse } from 'next/server';
+import { HostedWorkflowServer, createSSEResponse } from '@/lib/chatkit-lite';
+import { MemoryThreadStore } from '@/lib/chatkit-lite/memory-store';
 
-// Update these imports to match where you placed chatkit-lite/
-import { HostedWorkflowServer, createSSEResponse } from './index';
-import { PostgresThreadStore } from './thread-store';
+const WORKFLOW_ID = process.env.NEXT_PUBLIC_WORKFLOW_ID || 'wf_69c369b94cec8190aa28c8918ea389490c2f4865c660087c';
 
-// =============================================================================
-// CONFIGURATION - Update these values
-// =============================================================================
-
-// Your hosted workflow ID from OpenAI Agent Builder
-const WORKFLOW_ID = process.env.WORKFLOW_ID || 'wf_your_workflow_id_here';
-
-// =============================================================================
-// AUTH - Replace with your own authentication
-// =============================================================================
-
-function getUserId(request: NextRequest): string {
-  // API key auth for widgets
-  const apiKey = request.headers.get('x-api-key');
-  if (process.env.WIDGET_API_KEY && apiKey === process.env.WIDGET_API_KEY) {
-    return 'widget_user';
-  }
-
-  // No auth configured - allow all (dev mode only!)
-  if (!process.env.WIDGET_API_KEY) {
-    console.warn('[ChatKit Lite] No WIDGET_API_KEY set - running in dev mode');
-    return 'demo_user';
-  }
-
-  throw new Error('Unauthorized');
+function getUserId(_request: NextRequest): string {
+  return 'demo_user';
 }
 
-// =============================================================================
-// ROUTE HANDLER
-// =============================================================================
-
-// Streaming request types
 const STREAMING_TYPES = [
   'threads.create',
   'threads.add_user_message',
@@ -65,21 +20,19 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { type, params } = body;
 
-    const store = new PostgresThreadStore(userId);
+    const store = new MemoryThreadStore(userId);
+    console.log('[chat route]', type, params?.thread_id || '');
 
-    // Streaming requests - delegate to server
     if (STREAMING_TYPES.includes(type)) {
       const server = new HostedWorkflowServer(store, WORKFLOW_ID);
       const events = server.process(body);
       return createSSEResponse(events);
     }
 
-    // Non-streaming requests - handle directly
     switch (type) {
       case 'threads.list': {
         const { limit = 50, after = null, order = 'desc' } = params || {};
         const result = await store.loadThreads(limit, after, order);
-        // Normalize status shape to match SDK expectations
         return NextResponse.json({
           ...result,
           data: result.data.map((t) => ({
@@ -139,7 +92,6 @@ export async function POST(request: NextRequest) {
       }
 
       case 'items.feedback': {
-        // No-op - feedback not implemented
         return NextResponse.json({});
       }
 

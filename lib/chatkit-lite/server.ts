@@ -421,24 +421,29 @@ export class HostedWorkflowServer {
     input: WorkflowInputItem[],
     abortSignal?: AbortSignal
   ): AsyncGenerator<WorkflowEvent> {
-    const response = await fetch(
-      `https://api.openai.com/v1/workflows/${this.workflowId}/run`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          input_data: { input },
-          state_values: [],
-          session: true,
-          tracing: { enabled: true },
-          stream: true,
-        }),
-        signal: abortSignal,
-      }
-    );
+    // Extract user text for input_as_text (required by hosted workflows)
+    const lastUserMessage = input.filter(i => i.type === 'message' && i.role === 'user').pop();
+    const inputAsText = (lastUserMessage as any)?.content
+      ?.filter((c: any) => c.type === 'input_text' || c.type === 'text')
+      ?.map((c: any) => c.text)
+      ?.join('\n') || '';
+
+    const url = `https://api.openai.com/v1/workflows/${this.workflowId}/run`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        input_data: { input, input_as_text: inputAsText },
+        state_values: [],
+        session: true,
+        tracing: { enabled: true },
+        stream: true,
+      }),
+      signal: abortSignal,
+    });
 
     if (!response.ok) {
       const errText = await response.text().catch(() => response.statusText);
@@ -452,6 +457,8 @@ export class HostedWorkflowServer {
     let buffer = '';
     let currentWorkflowId: string | null = null;
     const tasks: WorkflowTask[] = [];
+    let bufferedOutputText = '';
+    let lastResponseId: string | null = null;
 
     try {
       while (true) {
@@ -468,20 +475,46 @@ export class HostedWorkflowServer {
         buffer = lines.pop() || '';
 
         for (const line of lines) {
+          if (!line.trim() || line.startsWith(':')) continue;
           if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6).trim();
+          const data = line.slice(6);
           if (data === '[DONE]') continue;
 
           try {
             const event = JSON.parse(data);
-            yield* this.parseWorkflowEvent(event, currentWorkflowId, tasks, (id) => {
-              currentWorkflowId = id;
-            });
+
+            // Workflow node finished — emit buffered text if this was a user-visible node
+            if (event.type === 'workflow.node.finished') {
+              const outputText = event.action?.data?.output_text;
+              const outputParsed = event.action?.data?.output_parsed;
+              const textToEmit = bufferedOutputText || outputText;
+              if (textToEmit && outputParsed == null) {
+                yield { type: 'text_delta', delta: textToEmit };
+              }
+              bufferedOutputText = '';
+            }
+
+            // Workflow failed
+            if (event.type === 'workflow.failed') {
+              const errorMessage = event.error?.message || 'Workflow failed';
+              yield { type: 'text_delta', delta: `Error: ${errorMessage}` };
+            }
+
+            // Unwrap workflow.node.agent.response envelope
+            if (event.type === 'workflow.node.agent.response' && event.data) {
+              const agentEvent = event.data;
+              yield* this.parseWorkflowEvent(agentEvent, currentWorkflowId, tasks, (id) => {
+                currentWorkflowId = id;
+              }, bufferedOutputText, (text) => { bufferedOutputText = text; }, lastResponseId, (id) => { lastResponseId = id; });
+            }
           } catch {
             // Skip malformed events
           }
         }
       }
+
+      // Emit response_completed
+      yield { type: 'response_completed', response_id: lastResponseId } as WorkflowEvent;
     } finally {
       reader.releaseLock();
     }
@@ -494,19 +527,34 @@ export class HostedWorkflowServer {
     event: any,
     currentWorkflowId: string | null,
     tasks: WorkflowTask[],
-    setWorkflowId: (id: string) => void
+    setWorkflowId: (id: string) => void,
+    bufferedOutputText: string,
+    setBufferedOutputText: (text: string) => void,
+    lastResponseId: string | null,
+    setLastResponseId: (id: string) => void
   ): Generator<WorkflowEvent> {
     const eventType = event.type;
 
-    if (eventType === 'response.output_text.delta') {
-      yield { type: 'text_delta', delta: event.delta || '' };
+    // Text delta — buffer (emitted on workflow.node.finished)
+    if (eventType === 'response.output_text.delta' && event.delta) {
+      setBufferedOutputText(bufferedOutputText + event.delta);
 
-    } else if (eventType === 'response.reasoning_summary_part.added') {
-      const id = `wf_${Date.now()}`;
-      setWorkflowId(id);
-      yield { type: 'workflow_started', id, created_at: Date.now() };
+    // Reasoning started
+    } else if (
+      eventType === 'response.reasoning_summary_part.added' ||
+      (eventType === 'response.output_item.added' && event.item?.type === 'reasoning')
+    ) {
+      if (!currentWorkflowId) {
+        const id = `wf_${Date.now()}`;
+        setWorkflowId(id);
+        yield { type: 'workflow_started', id, created_at: Date.now() };
+      }
 
-    } else if (eventType === 'response.reasoning_summary_text.delta' && currentWorkflowId) {
+    // Reasoning text delta
+    } else if (
+      (eventType === 'response.reasoning_summary_text.delta' || eventType === 'response.reasoning_text.delta') &&
+      currentWorkflowId
+    ) {
       const text = event.delta || '';
       if (tasks.length === 0) {
         tasks.push({ type: 'thought', content: text });
@@ -517,17 +565,48 @@ export class HostedWorkflowServer {
         yield { type: 'workflow_task_updated', task_index: tasks.length - 1, task: last };
       }
 
-    } else if (eventType === 'response.reasoning_summary_part.done' && currentWorkflowId) {
+    // Reasoning done
+    } else if (
+      (eventType === 'response.reasoning_summary_part.done' ||
+       (eventType === 'response.output_item.done' && event.item?.type === 'reasoning')) &&
+      currentWorkflowId
+    ) {
       yield {
         type: 'workflow_done',
         id: currentWorkflowId,
         tasks: [...tasks],
-        response_id: event.response_id,
-        input_tokens: event.usage?.input_tokens,
+        response_id: lastResponseId || undefined,
       };
       tasks.length = 0;
+      setWorkflowId(null as any);
 
+    // Message item added — close workflow before message starts
+    } else if (eventType === 'response.output_item.added' && event.item?.type === 'message') {
+      if (currentWorkflowId && tasks.length > 0) {
+        yield {
+          type: 'workflow_done',
+          id: currentWorkflowId,
+          tasks: [...tasks],
+          response_id: lastResponseId || undefined,
+        };
+        tasks.length = 0;
+        setWorkflowId(null as any);
+      }
+
+    // Tool call done
     } else if (eventType === 'response.output_item.done' && event.item?.type === 'function_call') {
+      // Close workflow before tool call
+      if (currentWorkflowId && tasks.length > 0) {
+        yield {
+          type: 'workflow_done',
+          id: currentWorkflowId,
+          tasks: [...tasks],
+          response_id: lastResponseId || undefined,
+        };
+        tasks.length = 0;
+        setWorkflowId(null as any);
+      }
+
       const fn = event.item;
       let args: Record<string, unknown> = {};
       try {
@@ -540,20 +619,24 @@ export class HostedWorkflowServer {
         name: fn.name,
         arguments: args,
         call_id: fn.call_id,
-        responseId: event.response_id,
+        responseId: event.response?.id || lastResponseId,
       };
 
+    // Response completed — capture response_id, close any open workflow
     } else if (eventType === 'response.completed') {
-      // Emit workflow_done if we have an active workflow
+      if (event.response?.id) {
+        setLastResponseId(event.response.id);
+      }
       if (currentWorkflowId && tasks.length > 0) {
         yield {
           type: 'workflow_done',
           id: currentWorkflowId,
           tasks: [...tasks],
-          response_id: event.response?.id,
+          response_id: event.response?.id || lastResponseId,
           input_tokens: event.response?.usage?.input_tokens,
         };
         tasks.length = 0;
+        setWorkflowId(null as any);
       }
     }
   }
@@ -680,7 +763,7 @@ export class HostedWorkflowServer {
   private async triggerCompaction(threadId: string, responseId: string): Promise<boolean> {
     try {
       const client = new OpenAI();
-      const result = await client.responses.compact({
+      const result = await (client.responses as any).compact({
         previous_response_id: responseId,
         model: 'gpt-4.1',
       });
