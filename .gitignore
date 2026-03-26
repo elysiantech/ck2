@@ -10,11 +10,13 @@ build
 dist
 
 # env files
+.env
 .env*.local
 
 # misc
 .DS_Store
 *.pem
+*.docx
 
 # debug
 npm-debug.log*
