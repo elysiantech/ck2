@@ -6,6 +6,7 @@ export interface IframeWidgetProps {
   code: string;
   onSendPrompt?: (text: string) => void;
   onShare?: (data: { widgetCode: string; cssVars: Record<string, string> }) => Promise<string | null>;
+  onAction?: (name: string, args?: Record<string, unknown>) => void;
   hideActions?: boolean;
 }
 
@@ -85,7 +86,7 @@ function buildHtmlDocument(widgetCode: string): string {
  * Sandboxed iframe component for rendering agent-generated widgets.
  * CSS variables are forwarded from the host page for consistent theming.
  */
-export function IframeWidget({ code, onSendPrompt, onShare, hideActions }: IframeWidgetProps) {
+export function IframeWidget({ code, onSendPrompt, onShare, onAction, hideActions }: IframeWidgetProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(300);
   const [error, setError] = useState<string | null>(null);
@@ -143,6 +144,9 @@ export function IframeWidget({ code, onSendPrompt, onShare, hideActions }: Ifram
         if (event.data?.type === 'sendPrompt' && typeof event.data.text === 'string') {
           onSendPrompt?.(event.data.text);
         }
+        if (event.data?.type === 'action' && typeof event.data.name === 'string') {
+          onAction?.(event.data.name, event.data.args);
+        }
         if (event.data?.type === 'error' && typeof event.data.message === 'string') {
           setError(event.data.message);
         }
@@ -151,7 +155,7 @@ export function IframeWidget({ code, onSendPrompt, onShare, hideActions }: Ifram
 
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [onSendPrompt]);
+  }, [onSendPrompt, onAction]);
 
   const handleError = useCallback(() => {
     setError('Failed to load widget');

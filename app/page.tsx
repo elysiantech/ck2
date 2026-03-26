@@ -24,6 +24,7 @@ export default function Home() {
           options={{
             history: { enabled: false },
             header: { enabled: false },
+            reasoning: (process.env.NEXT_PUBLIC_REASONING_DISPLAY as 'none' | 'titles' | 'full') || 'none',
             composer: {
               attachments: { enabled: false },
             },
@@ -31,6 +32,27 @@ export default function Home() {
               htmlUrl: '/start-screen.html',
             },
             widgets: {
+              onWidgetAction: (name, args) => {
+                switch (name) {
+                  case 'print':
+                    window.print();
+                    break;
+                  case 'downloadPDF': {
+                    const id = (args as { id?: string })?.id || 'document';
+                    // TODO: fetch from storage and trigger download
+                    console.log('[downloadPDF]', id);
+                    break;
+                  }
+                  case 'openDocument': {
+                    const id = (args as { id?: string })?.id || 'document';
+                    // TODO: open document preview modal
+                    console.log('[openDocument]', id);
+                    break;
+                  }
+                  default:
+                    console.warn('Unknown widget action:', name, args);
+                }
+              },
               onShare: async ({ widgetCode, cssVars, widgetId }) => {
                 const html = buildShareableHtml(widgetCode, cssVars);
                 const blob = new Blob([html], { type: 'text/html' });

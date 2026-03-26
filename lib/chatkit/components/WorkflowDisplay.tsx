@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Workflow } from '../types';
@@ -7,10 +7,18 @@ import type { Workflow } from '../types';
 interface WorkflowDisplayProps {
   workflow: Workflow;
   expanded?: boolean;
+  mode?: 'titles' | 'full';
 }
 
-export function WorkflowDisplay({ workflow, expanded: initialExpanded }: WorkflowDisplayProps) {
-  const [isExpanded, setIsExpanded] = useState(initialExpanded ?? false);
+export function WorkflowDisplay({ workflow, expanded: propExpanded, mode = 'full' }: WorkflowDisplayProps) {
+  const [isExpanded, setIsExpanded] = useState(propExpanded ?? false);
+
+  // Sync with prop — auto-collapse when expanded changes to false
+  useEffect(() => {
+    if (propExpanded !== undefined) {
+      setIsExpanded(propExpanded);
+    }
+  }, [propExpanded]);
   const hasTasks = workflow.tasks && workflow.tasks.length > 0;
 
   return (
@@ -63,7 +71,7 @@ export function WorkflowDisplay({ workflow, expanded: initialExpanded }: Workflo
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{task.title}</ReactMarkdown>
                     </div>
                   )}
-                  {task.content && (
+                  {mode === 'full' && task.content && (
                     <div className="text-sm text-gray-600 mt-1 workflow-task-content">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{task.content}</ReactMarkdown>
                     </div>

@@ -186,14 +186,17 @@ export class HostedWorkflowServer {
     try {
       for await (const event of this.callWorkflow(messages, abortSignal)) {
         if (event.type === 'workflow_started') {
-          currentWorkflow = {
-            type: 'workflow',
-            id: event.id,
-            thread_id: thread.id,
-            created_at: new Date().toISOString(),
-            workflow: { type: 'reasoning', tasks: [], expanded: true, summary: null },
-          };
-          yield { type: 'thread.item.added', item: currentWorkflow };
+          // Reuse existing workflow if one is already open (multiple reasoning parts)
+          if (!currentWorkflow) {
+            currentWorkflow = {
+              type: 'workflow',
+              id: event.id,
+              thread_id: thread.id,
+              created_at: new Date().toISOString(),
+              workflow: { type: 'reasoning', tasks: [], expanded: true, summary: null },
+            };
+            yield { type: 'thread.item.added', item: currentWorkflow };
+          }
 
         } else if (event.type === 'workflow_task_added' && currentWorkflow) {
           currentWorkflow.workflow.tasks.push(event.task);
@@ -211,19 +214,23 @@ export class HostedWorkflowServer {
             update: { type: 'workflow.task.updated', task_index: event.task_index, task: event.task },
           };
 
-        } else if (event.type === 'workflow_done' && currentWorkflow) {
+        } else if (event.type === 'workflow_done') {
           if (event.response_id) lastResponseId = event.response_id;
           if (event.input_tokens) {
             thread.metadata = { ...thread.metadata, last_input_tokens: event.input_tokens };
           }
-          currentWorkflow.workflow.expanded = false;
-          // Persist workflow item
-          await this.store.addThreadItem(thread.id, currentWorkflow);
-          yield { type: 'thread.item.done', item: currentWorkflow };
-          currentWorkflow = null;
-          yield { type: 'progress_update', text: '' };
+          // Don't close the workflow yet — more reasoning parts may follow.
+          // It gets closed when text output starts or the stream ends.
 
         } else if (event.type === 'text_delta') {
+          // Close open workflow before text starts
+          if (currentWorkflow) {
+            currentWorkflow.workflow.expanded = false;
+            await this.store.addThreadItem(thread.id, currentWorkflow);
+            yield { type: 'thread.item.done', item: currentWorkflow };
+            currentWorkflow = null;
+            yield { type: 'progress_update', text: '' };
+          }
           if (!messageStarted) {
             yield* this.emitMessageStart(messageId, thread.id, now);
             messageStarted = true;
@@ -311,16 +318,17 @@ export class HostedWorkflowServer {
 
     try {
       for await (const event of this.callWorkflow(history, abortSignal)) {
-        // Handle workflow events in continuation too
         if (event.type === 'workflow_started') {
-          currentWorkflow = {
-            type: 'workflow',
-            id: event.id,
-            thread_id: thread.id,
-            created_at: new Date().toISOString(),
-            workflow: { type: 'reasoning', tasks: [], expanded: true, summary: null },
-          };
-          yield { type: 'thread.item.added', item: currentWorkflow };
+          if (!currentWorkflow) {
+            currentWorkflow = {
+              type: 'workflow',
+              id: event.id,
+              thread_id: thread.id,
+              created_at: new Date().toISOString(),
+              workflow: { type: 'reasoning', tasks: [], expanded: true, summary: null },
+            };
+            yield { type: 'thread.item.added', item: currentWorkflow };
+          }
 
         } else if (event.type === 'workflow_task_added' && currentWorkflow) {
           currentWorkflow.workflow.tasks.push(event.task);
@@ -340,15 +348,15 @@ export class HostedWorkflowServer {
 
         } else if (event.type === 'workflow_done') {
           if (event.response_id) lastResponseId = event.response_id;
+
+        } else if (event.type === 'text_delta') {
           if (currentWorkflow) {
             currentWorkflow.workflow.expanded = false;
             await this.store.addThreadItem(thread.id, currentWorkflow);
             yield { type: 'thread.item.done', item: currentWorkflow };
             currentWorkflow = null;
+            yield { type: 'progress_update', text: '' };
           }
-          yield { type: 'progress_update', text: '' };
-
-        } else if (event.type === 'text_delta') {
           if (!messageStarted) {
             yield* this.emitMessageStart(messageId, thread.id, now);
             messageStarted = true;
@@ -455,10 +463,13 @@ export class HostedWorkflowServer {
 
     const decoder = new TextDecoder();
     let buffer = '';
-    let currentWorkflowId: string | null = null;
-    const tasks: WorkflowTask[] = [];
-    let bufferedOutputText = '';
-    let lastResponseId: string | null = null;
+    const parseState = {
+      currentWorkflowId: null as string | null,
+      tasks: [] as WorkflowTask[],
+      bufferedOutputText: '',
+      lastResponseId: null as string | null,
+      newPartPending: false,
+    };
 
     try {
       while (true) {
@@ -487,11 +498,11 @@ export class HostedWorkflowServer {
             if (event.type === 'workflow.node.finished') {
               const outputText = event.action?.data?.output_text;
               const outputParsed = event.action?.data?.output_parsed;
-              const textToEmit = bufferedOutputText || outputText;
+              const textToEmit = parseState.bufferedOutputText || outputText;
               if (textToEmit && outputParsed == null) {
                 yield { type: 'text_delta', delta: textToEmit };
               }
-              bufferedOutputText = '';
+              parseState.bufferedOutputText = '';
             }
 
             // Workflow failed
@@ -502,10 +513,7 @@ export class HostedWorkflowServer {
 
             // Unwrap workflow.node.agent.response envelope
             if (event.type === 'workflow.node.agent.response' && event.data) {
-              const agentEvent = event.data;
-              yield* this.parseWorkflowEvent(agentEvent, currentWorkflowId, tasks, (id) => {
-                currentWorkflowId = id;
-              }, bufferedOutputText, (text) => { bufferedOutputText = text; }, lastResponseId, (id) => { lastResponseId = id; });
+              yield* this.parseWorkflowEvent(event.data, parseState);
             }
           } catch {
             // Skip malformed events
@@ -514,99 +522,65 @@ export class HostedWorkflowServer {
       }
 
       // Emit response_completed
-      yield { type: 'response_completed', response_id: lastResponseId } as WorkflowEvent;
+      yield { type: 'response_completed', response_id: parseState.lastResponseId } as WorkflowEvent;
     } finally {
       reader.releaseLock();
     }
   }
 
   /**
-   * Parse SSE events from workflow
+   * Parse unwrapped agent response events from the workflow SSE stream
    */
   private *parseWorkflowEvent(
     event: any,
-    currentWorkflowId: string | null,
-    tasks: WorkflowTask[],
-    setWorkflowId: (id: string) => void,
-    bufferedOutputText: string,
-    setBufferedOutputText: (text: string) => void,
-    lastResponseId: string | null,
-    setLastResponseId: (id: string) => void
+    s: { currentWorkflowId: string | null; tasks: WorkflowTask[]; bufferedOutputText: string; lastResponseId: string | null; newPartPending: boolean }
   ): Generator<WorkflowEvent> {
     const eventType = event.type;
 
     // Text delta — buffer (emitted on workflow.node.finished)
     if (eventType === 'response.output_text.delta' && event.delta) {
-      setBufferedOutputText(bufferedOutputText + event.delta);
+      s.bufferedOutputText += event.delta;
 
-    // Reasoning started
+    // Reasoning part started — create workflow or mark new part
     } else if (
       eventType === 'response.reasoning_summary_part.added' ||
       (eventType === 'response.output_item.added' && event.item?.type === 'reasoning')
     ) {
-      if (!currentWorkflowId) {
-        const id = `wf_${Date.now()}`;
-        setWorkflowId(id);
-        yield { type: 'workflow_started', id, created_at: Date.now() };
+      if (!s.currentWorkflowId) {
+        s.currentWorkflowId = `wf_${Date.now()}`;
+        yield { type: 'workflow_started', id: s.currentWorkflowId, created_at: Date.now() };
+      } else {
+        // Additional reasoning part — next delta should create a new task
+        s.newPartPending = true;
       }
 
     // Reasoning text delta
     } else if (
       (eventType === 'response.reasoning_summary_text.delta' || eventType === 'response.reasoning_text.delta') &&
-      currentWorkflowId
+      s.currentWorkflowId
     ) {
       const text = event.delta || '';
-      if (tasks.length === 0) {
-        tasks.push({ type: 'thought', content: text });
-        yield { type: 'workflow_task_added', task_index: 0, task: tasks[0] };
+      if (s.tasks.length === 0 || s.newPartPending) {
+        // Start a new task
+        s.newPartPending = false;
+        s.tasks.push({ type: 'thought', content: text });
+        yield { type: 'workflow_task_added', task_index: s.tasks.length - 1, task: s.tasks[s.tasks.length - 1] };
       } else {
-        const last = tasks[tasks.length - 1];
+        // Append to current task
+        const last = s.tasks[s.tasks.length - 1];
         last.content = (last.content || '') + text;
-        yield { type: 'workflow_task_updated', task_index: tasks.length - 1, task: last };
+        yield { type: 'workflow_task_updated', task_index: s.tasks.length - 1, task: last };
       }
 
-    // Reasoning done
+    // Reasoning part done — keep workflow open, more parts may follow
     } else if (
-      (eventType === 'response.reasoning_summary_part.done' ||
-       (eventType === 'response.output_item.done' && event.item?.type === 'reasoning')) &&
-      currentWorkflowId
+      eventType === 'response.reasoning_summary_part.done' ||
+      (eventType === 'response.output_item.done' && event.item?.type === 'reasoning')
     ) {
-      yield {
-        type: 'workflow_done',
-        id: currentWorkflowId,
-        tasks: [...tasks],
-        response_id: lastResponseId || undefined,
-      };
-      tasks.length = 0;
-      setWorkflowId(null as any);
-
-    // Message item added — close workflow before message starts
-    } else if (eventType === 'response.output_item.added' && event.item?.type === 'message') {
-      if (currentWorkflowId && tasks.length > 0) {
-        yield {
-          type: 'workflow_done',
-          id: currentWorkflowId,
-          tasks: [...tasks],
-          response_id: lastResponseId || undefined,
-        };
-        tasks.length = 0;
-        setWorkflowId(null as any);
-      }
+      if (event.response_id) s.lastResponseId = event.response_id;
 
     // Tool call done
     } else if (eventType === 'response.output_item.done' && event.item?.type === 'function_call') {
-      // Close workflow before tool call
-      if (currentWorkflowId && tasks.length > 0) {
-        yield {
-          type: 'workflow_done',
-          id: currentWorkflowId,
-          tasks: [...tasks],
-          response_id: lastResponseId || undefined,
-        };
-        tasks.length = 0;
-        setWorkflowId(null as any);
-      }
-
       const fn = event.item;
       let args: Record<string, unknown> = {};
       try {
@@ -619,25 +593,12 @@ export class HostedWorkflowServer {
         name: fn.name,
         arguments: args,
         call_id: fn.call_id,
-        responseId: event.response?.id || lastResponseId,
+        responseId: event.response?.id || s.lastResponseId,
       };
 
-    // Response completed — capture response_id, close any open workflow
+    // Response completed — capture response_id
     } else if (eventType === 'response.completed') {
-      if (event.response?.id) {
-        setLastResponseId(event.response.id);
-      }
-      if (currentWorkflowId && tasks.length > 0) {
-        yield {
-          type: 'workflow_done',
-          id: currentWorkflowId,
-          tasks: [...tasks],
-          response_id: event.response?.id || lastResponseId,
-          input_tokens: event.response?.usage?.input_tokens,
-        };
-        tasks.length = 0;
-        setWorkflowId(null as any);
-      }
+      if (event.response?.id) s.lastResponseId = event.response.id;
     }
   }
 

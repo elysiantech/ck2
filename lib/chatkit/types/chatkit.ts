@@ -648,6 +648,7 @@ export interface ChatKitOptions {
   entities?: EntitiesOptions;
   widgets?: WidgetsOptions;
   skills?: SkillsOptions;
+  reasoning?: 'none' | 'titles' | 'full';
 
   // Client tool execution (server requests client-side tool execution)
   onClientTool?: (params: {
@@ -752,5 +753,5 @@ export interface WidgetShareData {
 export interface WidgetsOptions {
   onAction?: (action: ActionConfig, item: WidgetItem) => Promise<void>;
   onShare?: (data: WidgetShareData) => Promise<string | null>;
-  // If onShare provided → Share button shows
+  onWidgetAction?: (name: string, args?: Record<string, unknown>) => void;
 }

@@ -838,7 +838,8 @@ export function ChatKit({ control, options, registerComposer }: ChatKitProps) {
                               widgetId: item.id,
                               threadId: state.currentThread?.id,
                             });
-                          } : undefined
+                          } : undefined,
+                          options?.widgets?.onWidgetAction
                         )}
                       </div>
                       {/* Action icons - only show at end of assistant turn */}
@@ -893,8 +894,8 @@ export function ChatKit({ control, options, registerComposer }: ChatKitProps) {
                       )}
                     </div>
                   )}
-                  {item.type === 'workflow' && item.workflow && (
-                    <WorkflowDisplay workflow={item.workflow} expanded={item.workflow.expanded} />
+                  {item.type === 'workflow' && item.workflow && options?.reasoning !== 'none' && (
+                    <WorkflowDisplay workflow={item.workflow} expanded={item.workflow.expanded} mode={options?.reasoning || 'full'} />
                   )}
                   {item.type === 'widget' && item.widget && (
                     <div className="my-3">
@@ -917,6 +918,16 @@ export function ChatKit({ control, options, registerComposer }: ChatKitProps) {
                 );
               })}
 
+              {state.isStreaming && visibleItems.length > 0 && (() => {
+                const lastUserIdx = visibleItems.findLastIndex(i => i.type === 'user_message');
+                return lastUserIdx >= 0 && !visibleItems.slice(lastUserIdx).some(i => i.type === 'assistant_message');
+              })() && (
+                <div className="flex items-center gap-1 py-4 px-1">
+                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
+                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
+                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
+                </div>
+              )}
               {state.isStreaming && state.progressText && (
                 <div className="text-sm text-gray-500">{state.progressText}</div>
               )}
