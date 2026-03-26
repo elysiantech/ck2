@@ -1,13 +1,15 @@
 /**
  * ChatKit Lite - Postgres thread store
  *
- * Uses @vercel/postgres. Swap this file for other backends.
+ * Uses @neondatabase/serverless. Set DATABASE_URL in .env.
  */
 
-import { sql } from '@vercel/postgres';
+import { neon } from '@neondatabase/serverless';
 import type { Store } from './store';
 import { generateId } from './store';
 import type { ThreadMetadata, ThreadItem, Page } from './types';
+
+const sql = neon(process.env.DATABASE_URL!);
 
 export class PostgresThreadStore implements Store {
   private userId: string;
@@ -26,13 +28,13 @@ export class PostgresThreadStore implements Store {
   }
 
   async loadThread(threadId: string): Promise<ThreadMetadata | null> {
-    const result = await sql`
+    const rows = await sql`
       SELECT id, created_at, status, title, metadata
       FROM threads
       WHERE id = ${threadId} AND user_id = ${this.userId}
     `;
-    if (result.rows.length === 0) return null;
-    const row = result.rows[0];
+    if (rows.length === 0) return null;
+    const row = rows[0];
     return {
       id: row.id,
       created_at: new Date(row.created_at),
@@ -61,13 +63,11 @@ export class PostgresThreadStore implements Store {
   }
 
   async deleteThread(threadId: string): Promise<void> {
-    // Verify ownership first
     const check = await sql`
       SELECT id FROM threads WHERE id = ${threadId} AND user_id = ${this.userId}
     `;
-    if (check.rows.length === 0) return;
+    if (check.length === 0) return;
 
-    // Now safe to delete items
     await sql`DELETE FROM thread_items WHERE thread_id = ${threadId}`;
     await sql`DELETE FROM threads WHERE id = ${threadId} AND user_id = ${this.userId}`;
   }
@@ -77,10 +77,10 @@ export class PostgresThreadStore implements Store {
     after: string | null,
     order: 'asc' | 'desc'
   ): Promise<Page<ThreadMetadata>> {
-    let result;
+    let rows;
     if (after) {
       if (order === 'desc') {
-        result = await sql`
+        rows = await sql`
           SELECT id, created_at, status, title, metadata
           FROM threads
           WHERE user_id = ${this.userId} AND created_at < (
@@ -90,7 +90,7 @@ export class PostgresThreadStore implements Store {
           LIMIT ${limit + 1}
         `;
       } else {
-        result = await sql`
+        rows = await sql`
           SELECT id, created_at, status, title, metadata
           FROM threads
           WHERE user_id = ${this.userId} AND created_at > (
@@ -102,7 +102,7 @@ export class PostgresThreadStore implements Store {
       }
     } else {
       if (order === 'desc') {
-        result = await sql`
+        rows = await sql`
           SELECT id, created_at, status, title, metadata
           FROM threads
           WHERE user_id = ${this.userId}
@@ -110,7 +110,7 @@ export class PostgresThreadStore implements Store {
           LIMIT ${limit + 1}
         `;
       } else {
-        result = await sql`
+        rows = await sql`
           SELECT id, created_at, status, title, metadata
           FROM threads
           WHERE user_id = ${this.userId}
@@ -120,8 +120,8 @@ export class PostgresThreadStore implements Store {
       }
     }
 
-    const hasMore = result.rows.length > limit;
-    const data = result.rows.slice(0, limit).map((row) => ({
+    const hasMore = rows.length > limit;
+    const data = rows.slice(0, limit).map((row) => ({
       id: row.id,
       created_at: new Date(row.created_at),
       status: row.status || 'active',
@@ -142,18 +142,17 @@ export class PostgresThreadStore implements Store {
     limit: number,
     order: 'asc' | 'desc'
   ): Promise<Page<ThreadItem>> {
-    // Verify thread ownership first
     const check = await sql`
       SELECT id FROM threads WHERE id = ${threadId} AND user_id = ${this.userId}
     `;
-    if (check.rows.length === 0) {
+    if (check.length === 0) {
       return { data: [], has_more: false, after: null };
     }
 
-    let result;
+    let rows;
     if (after) {
       if (order === 'asc') {
-        result = await sql`
+        rows = await sql`
           SELECT data FROM thread_items
           WHERE thread_id = ${threadId} AND created_at > (
             SELECT created_at FROM thread_items WHERE thread_id = ${threadId} AND (data->>'id') = ${after}
@@ -162,7 +161,7 @@ export class PostgresThreadStore implements Store {
           LIMIT ${limit + 1}
         `;
       } else {
-        result = await sql`
+        rows = await sql`
           SELECT data FROM thread_items
           WHERE thread_id = ${threadId} AND created_at < (
             SELECT created_at FROM thread_items WHERE thread_id = ${threadId} AND (data->>'id') = ${after}
@@ -173,14 +172,14 @@ export class PostgresThreadStore implements Store {
       }
     } else {
       if (order === 'asc') {
-        result = await sql`
+        rows = await sql`
           SELECT data FROM thread_items
           WHERE thread_id = ${threadId}
           ORDER BY created_at ASC
           LIMIT ${limit + 1}
         `;
       } else {
-        result = await sql`
+        rows = await sql`
           SELECT data FROM thread_items
           WHERE thread_id = ${threadId}
           ORDER BY created_at DESC
@@ -189,8 +188,8 @@ export class PostgresThreadStore implements Store {
       }
     }
 
-    const hasMore = result.rows.length > limit;
-    const data = result.rows.slice(0, limit).map((row) => row.data as ThreadItem);
+    const hasMore = rows.length > limit;
+    const data = rows.slice(0, limit).map((row) => row.data as ThreadItem);
 
     return {
       data,
@@ -212,13 +211,13 @@ export class PostgresThreadStore implements Store {
   }
 
   async updateThreadItem(threadId: string, itemId: string, updates: Partial<ThreadItem>): Promise<void> {
-    const result = await sql`
+    const rows = await sql`
       SELECT data FROM thread_items
       WHERE thread_id = ${threadId} AND item_id = ${itemId}
     `;
-    if (result.rows.length === 0) return;
+    if (rows.length === 0) return;
 
-    const current = result.rows[0].data as ThreadItem;
+    const current = rows[0].data as ThreadItem;
     const updated = { ...current, ...updates };
 
     await sql`
@@ -240,8 +239,7 @@ export class PostgresThreadStore implements Store {
     itemId: string,
     result: unknown
   ): Promise<ThreadItem | null> {
-    // Atomic update - only succeeds if status is still pending
-    const updateResult = await sql`
+    const rows = await sql`
       UPDATE thread_items
       SET data = jsonb_set(
         jsonb_set(data, '{status}', '"completed"'),
@@ -254,7 +252,7 @@ export class PostgresThreadStore implements Store {
       RETURNING data
     `;
 
-    if (updateResult.rows.length === 0) return null;
-    return updateResult.rows[0].data as ThreadItem;
+    if (rows.length === 0) return null;
+    return rows[0].data as ThreadItem;
   }
 }
