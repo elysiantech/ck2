@@ -1,0 +1,90 @@
+
+<style>
+  .home {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 420px;
+    padding: 48px 32px 32px;
+    text-align: center;
+  }
+  .home-eyebrow {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-text-tertiary);
+    margin-bottom: 16px;
+  }
+  .home-heading {
+    font-size: 26px;
+    font-weight: 500;
+    color: var(--color-text-primary);
+    line-height: 1.3;
+    margin-bottom: 10px;
+    max-width: 480px;
+  }
+  .home-sub {
+    font-size: 15px;
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+    max-width: 420px;
+    margin-bottom: 36px;
+  }
+  .starters {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+    max-width: 560px;
+  }
+  .starter {
+    background: var(--color-background-primary);
+    border: 1px solid var(--color-border-secondary);
+    border-radius: var(--border-radius-lg);
+    padding: 12px 14px;
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    text-align: left;
+    cursor: pointer;
+    line-height: 1.45;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
+  }
+  .starter:hover {
+    border-color: var(--color-border-primary);
+    color: var(--color-text-primary);
+    background: var(--color-background-secondary);
+  }
+  .starter-arrow {
+    display: block;
+    font-size: 11px;
+    color: var(--color-text-tertiary);
+    margin-top: 6px;
+  }
+</style>
+
+<div class="home">
+  <div class="home-eyebrow">Fexel Advisor</div>
+  <div class="home-heading">Is automation right for your operation?</div>
+  <div class="home-sub">Describe what's happening on your floor. I'll build a live analysis: labor picture, ROI model, and a phased roadmap you can take to your team.</div>
+
+  <div class="starters">
+    <button class="starter" onclick="sendPrompt('We can\'t keep people on the line. Half my workforce is temp labor and I\'m tired of managing the churn.')">
+      We can't keep people on the line
+      <span class="starter-arrow">Labor reliability →</span>
+    </button>
+    <button class="starter" onclick="sendPrompt('I want to see if a palletizing robot pencils out for my operation. We run two shifts, about 3 operators on the line.')">
+      Does a palletizing robot pencil out?
+      <span class="starter-arrow">Run the numbers →</span>
+    </button>
+    <button class="starter" onclick="sendPrompt('Walk me through what automation would look like for my process. I\'m not sure where to start.')">
+      Walk me through my options
+      <span class="starter-arrow">Full analysis →</span>
+    </button>
+    <button class="starter" onclick="sendPrompt('How much does it cost to automate machine tending? I have CNC mills running 2 shifts.')">
+      What does machine tending cost?
+      <span class="starter-arrow">Get a range →</span>
+    </button>
+  </div>
+</div>

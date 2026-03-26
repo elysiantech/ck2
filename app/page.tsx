@@ -28,7 +28,7 @@ export default function Home() {
               attachments: { enabled: false },
             },
             startScreen: {
-              greeting: "What process are you looking to automate?",
+              htmlUrl: '/start-screen.html',
             },
             widgets: {
               onShare: async ({ widgetCode, cssVars, widgetId }) => {

@@ -3,6 +3,7 @@ import type { ChatKitControl, ComposerHandle } from '../hooks/useChatKit';
 import type { ChatKitOptions, Entity, SkillMetadata, Attachment, TextAttachment } from '../types';
 import { WidgetRenderer } from './WidgetRenderer';
 import { WorkflowDisplay } from './WorkflowDisplay';
+import { IframeWidget } from './IframeWidget';
 import {
   renderUserMessageContent,
   truncateText,
@@ -56,6 +57,17 @@ export function ChatKit({ control, options, registerComposer }: ChatKitProps) {
   const [skills, setSkills] = useState<SkillMetadata[]>([]);
   const [skillsLoading, setSkillsLoading] = useState(false);
   const [skillsFetched, setSkillsFetched] = useState(false);
+
+  // Start screen HTML
+  const [startScreenHtml, setStartScreenHtml] = useState<string | null>(null);
+  useEffect(() => {
+    if (options?.startScreen?.htmlUrl) {
+      fetch(options.startScreen.htmlUrl)
+        .then(r => r.text())
+        .then(setStartScreenHtml)
+        .catch(() => {});
+    }
+  }, [options?.startScreen?.htmlUrl]);
 
   // Copy feedback state
   const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
@@ -686,10 +698,20 @@ export function ChatKit({ control, options, registerComposer }: ChatKitProps) {
           {/* Top fade gradient - absolute so it doesn't affect scroll height */}
           <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-white to-transparent pointer-events-none z-10" />
           {visibleItems.length === 0 && !state.isStreaming ? (
-            <div className="h-full flex items-center justify-center px-4">
-              <h1 className="text-2xl font-semibold text-gray-900 text-center">
-                {options?.startScreen?.greeting || 'What are you working on?'}
-              </h1>
+            <div className={`h-full flex items-center justify-center ${startScreenHtml ? 'w-full' : 'px-4'}`}>
+              {startScreenHtml ? (
+                <div className="w-full h-full">
+                  <IframeWidget
+                    code={startScreenHtml}
+                    onSendPrompt={(text) => sendMessage(text)}
+                    hideActions
+                  />
+                </div>
+              ) : (
+                <h1 className="text-2xl font-semibold text-gray-900 text-center">
+                  {options?.startScreen?.greeting || 'What are you working on?'}
+                </h1>
+              )}
             </div>
           ) : (
             <div className="max-w-3xl mx-auto px-4 py-4 space-y-6">

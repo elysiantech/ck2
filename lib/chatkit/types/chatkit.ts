@@ -719,6 +719,7 @@ export interface AttachmentsOptions {
 export interface StartScreenOptions {
   greeting?: string;
   prompts?: StartScreenPrompt[];
+  htmlUrl?: string;
 }
 
 export interface StartScreenPrompt {

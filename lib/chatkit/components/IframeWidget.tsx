@@ -6,6 +6,7 @@ export interface IframeWidgetProps {
   code: string;
   onSendPrompt?: (text: string) => void;
   onShare?: (data: { widgetCode: string; cssVars: Record<string, string> }) => Promise<string | null>;
+  hideActions?: boolean;
 }
 
 /**
@@ -84,7 +85,7 @@ function buildHtmlDocument(widgetCode: string): string {
  * Sandboxed iframe component for rendering agent-generated widgets.
  * CSS variables are forwarded from the host page for consistent theming.
  */
-export function IframeWidget({ code, onSendPrompt, onShare }: IframeWidgetProps) {
+export function IframeWidget({ code, onSendPrompt, onShare, hideActions }: IframeWidgetProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(300);
   const [error, setError] = useState<string | null>(null);
@@ -165,7 +166,7 @@ export function IframeWidget({ code, onSendPrompt, onShare }: IframeWidgetProps)
   }
 
   return (
-    <div className="my-3 relative group">
+    <div className={hideActions ? 'relative w-full h-full' : 'my-3 relative group'}>
       <iframe
         ref={iframeRef}
         sandbox="allow-scripts allow-same-origin"
@@ -173,14 +174,14 @@ export function IframeWidget({ code, onSendPrompt, onShare }: IframeWidgetProps)
         onError={handleError}
         style={{
           width: '100%',
-          height: `${height}px`,
+          height: hideActions ? '100%' : `${height}px`,
           border: 'none',
           display: 'block',
         }}
         title="Widget"
       />
       {/* Button overlay */}
-      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      {!hideActions && <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         {/* Share button - only if onShare provided */}
         {onShare && (
           <button
@@ -217,7 +218,7 @@ export function IframeWidget({ code, onSendPrompt, onShare }: IframeWidgetProps)
             </svg>
           )}
         </button>
-      </div>
+      </div>}
     </div>
   );
 }
