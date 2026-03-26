@@ -16,6 +16,7 @@ import type {
   ClientEffectEvent,
   Entity,
   InputTagContent,
+  InputTextContent,
 } from '../types/chatkit';
 
 // ============================================================================
@@ -64,9 +65,24 @@ export interface SendMessageOptions {
 // useChatKit Hook
 // ============================================================================
 
-export function useChatKit(options: ChatKitOptions): { control: ChatKitControl } {
+// Imperative handle exposed by the hook for external control
+export interface ComposerHandle {
+  setValue: (value: string) => void;
+  focus: () => void;
+}
+
+export function useChatKit(options: ChatKitOptions): {
+  control: ChatKitControl;
+  setComposerValue: (params: { text?: string; content?: ContentPart[] }) => Promise<void>;
+  focusComposer: () => Promise<void>;
+  setThreadId: (threadId: string | null) => void;
+  sendUserMessage: (params: { content: ContentPart[]; context?: Record<string, unknown> }) => Promise<void>;
+  fetchUpdates: () => Promise<void>;
+  registerComposer: (handle: ComposerHandle) => void;
+} {
   const apiRef = useRef<ChatKitAPI | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const composerRef = useRef<ComposerHandle | null>(null);
 
   // Initialize API
   if (!apiRef.current) {
@@ -564,6 +580,7 @@ export function useChatKit(options: ChatKitOptions): { control: ChatKitControl }
           {
             thread_id: state.currentThread?.id,
             content: messageContent,
+            attachments: messageOptions?.attachments,
             context: messageOptions?.context,
           },
           abortControllerRef.current.signal
@@ -835,6 +852,54 @@ export function useChatKit(options: ChatKitOptions): { control: ChatKitControl }
   }, []);
 
   // --------------------------------------------------------------------------
+  // Imperative APIs (for external control of composer)
+  // --------------------------------------------------------------------------
+
+  const registerComposer = useCallback((handle: ComposerHandle) => {
+    composerRef.current = handle;
+  }, []);
+
+  const setComposerValue = useCallback(async (params: { text?: string; content?: ContentPart[] }) => {
+    if (composerRef.current) {
+      // If content is provided, extract text from input_text parts
+      let text = params.text || '';
+      if (params.content) {
+        text = params.content
+          .filter((p): p is InputTextContent => p.type === 'input_text')
+          .map(p => p.text)
+          .join('');
+      }
+      composerRef.current.setValue(text);
+    }
+  }, []);
+
+  const focusComposer = useCallback(async () => {
+    if (composerRef.current) {
+      composerRef.current.focus();
+    }
+  }, []);
+
+  const setThreadId = useCallback((threadId: string | null) => {
+    selectThread(threadId);
+  }, [selectThread]);
+
+  const sendUserMessage = useCallback(async (params: { content: ContentPart[]; context?: Record<string, unknown> }) => {
+    // Extract text from content parts
+    const text = params.content
+      .filter((p): p is InputTextContent => p.type === 'input_text')
+      .map(p => p.text)
+      .join('');
+    await sendMessage(text, { context: params.context });
+  }, [sendMessage]);
+
+  const fetchUpdates = useCallback(async () => {
+    // Re-fetch current thread items
+    if (state.currentThread) {
+      await selectThread(state.currentThread.id);
+    }
+  }, [state.currentThread, selectThread]);
+
+  // --------------------------------------------------------------------------
   // Initial Load
   // --------------------------------------------------------------------------
   // Thread list is fetched lazily when history panel opens (ChatKit.tsx)
@@ -862,6 +927,12 @@ export function useChatKit(options: ChatKitOptions): { control: ChatKitControl }
       stopStreaming,
       clearError,
     },
+    setComposerValue,
+    focusComposer,
+    setThreadId,
+    sendUserMessage,
+    fetchUpdates,
+    registerComposer,
   };
 }
 

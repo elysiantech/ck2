@@ -685,12 +685,11 @@ export interface UploadStrategy {
 export interface HeaderOptions {
   enabled?: boolean;
   title?: string;
-  customButtonLeft?: CustomButton;
-  customButtonRight?: CustomButton;
+  leftAction?: CustomButton;
+  rightAction?: CustomButton;
 }
 
 export interface CustomButton {
-  icon: string;
   onClick: () => void;
   label?: string;
 }

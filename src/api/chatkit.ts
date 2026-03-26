@@ -96,6 +96,7 @@ export class ChatKitAPI {
     params: {
       thread_id?: string;
       content: ContentPart[];
+      attachments?: Attachment[];
       context?: Record<string, unknown>;
     },
     signal?: AbortSignal
@@ -104,7 +105,7 @@ export class ChatKitAPI {
     const requestParams: Record<string, unknown> = {
       input: {
         content: params.content,
-        attachments: [],
+        attachments: (params.attachments || []).map(att => att.id),
         quoted_text: null,
       },
     };

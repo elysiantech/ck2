@@ -2,9 +2,16 @@ import { ChatKit, ResizablePanel } from '../components';
 import { useChatKit } from '../hooks';
 import { buildShareableHtml } from '../utils/widgetShare';
 
+const WORKFLOW_ID = 'wf_69c369b94cec8190aa28c8918ea389490c2f4865c660087c';
+
 export function WidgetEmbed() {
   const { control } = useChatKit({
-    api: { url: '/api/chatkit/chat' },
+    api: {
+      url: '/api/chatkit/chat',
+      headers: {
+        'x-page-context': JSON.stringify({ workflowId: WORKFLOW_ID }),
+      },
+    },
   });
 
   return (

@@ -99,6 +99,9 @@ export function IframeWidget({ code, onSendPrompt, onShare }: IframeWidgetProps)
     if (!iframe?.contentDocument?.body) return;
 
     try {
+      // Wait for fonts to be ready in the iframe
+      await iframe.contentDocument.fonts?.ready;
+
       const canvas = await html2canvas(iframe.contentDocument.body, {
         backgroundColor: '#ffffff',
         scale: 2,
