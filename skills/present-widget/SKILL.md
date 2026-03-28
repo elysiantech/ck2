@@ -955,6 +955,180 @@ investment phases with cost, value, and rationale per phase.
 
 ---
 
+### Pattern H — Solution landscape
+
+Spatial map showing where an operation sits relative to available solution
+classes. X-axis: deployment complexity (brownfield-friendly → greenfield required).
+Y-axis: labor reduction potential (low → high). Nodes represent solution classes.
+A "you" marker shows the operation's position. Candidate nodes pulse. Dimmed
+nodes are outside the operation's window.
+
+**When to use:** When the routing conversation has produced enough locators
+(order volume, facility size, primary pain) and genuine ambiguity exists between
+two or more solution classes. Do not fire when the answer is obvious or the user
+has already named a specific solution. Do not fire more than once per conversation.
+
+**Node states (caller decides which nodes get which state):**
+- `candidate` — in the operation's window. Pulsing ring rendered. Full opacity.
+- `dimmed` — outside window. 15% opacity. No ring. Tooltip still shows.
+- `you` — special marker. Teal dot + "Your operation" label. Not a solution node.
+
+**Pulsing ring:** Optional. Defined here for candidate state. Caller may suppress
+by omitting the ring element if the domain context makes animation feel wrong.
+
+**Injection points:**
+- `nodes` array: `{ id, label, sub, x, y, color, size, state, capex, labor, note }`
+  - `x`, `y`: 0–100 (percentage of chart area, origin bottom-left)
+  - `color`: hex — use semantic accent colors or ramp mids
+  - `size`: dot diameter in px (24–52 recommended range)
+  - `state`: `'candidate'` | `'dimmed'`
+- `YOU`: `{ x, y }` — operation marker position
+- Profile pills: key-value pairs shown above the map
+- Map title string
+
+**No CTAs in the widget.** The conversation handles next steps after the map.
+Tooltip on hover is the only interactivity.
+
+```widget
+<style>
+  .sl-wrap { font-family: var(--font-sans); padding: 4px 0; }
+  .sl-profile { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .sl-pill { background: var(--color-background-secondary); border: 0.5px solid var(--color-border-tertiary); border-radius: 20px; padding: 4px 12px; font-size: 12px; color: var(--color-text-secondary); }
+  .sl-pill span { color: var(--color-text-primary); font-weight: 500; }
+  .sl-map-title { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 8px; }
+  .sl-axes { position: relative; width: 100%; height: 400px; border-left: 1.5px solid var(--color-border-secondary); border-bottom: 1.5px solid var(--color-border-secondary); }
+  .sl-axis-y { position: absolute; left: -2.25rem; top: 50%; transform: translateY(-50%) rotate(-90deg); font-size: 10px; color: var(--color-text-tertiary); white-space: nowrap; }
+  .sl-axis-x { position: absolute; bottom: -1.5rem; width: 100%; text-align: center; font-size: 10px; color: var(--color-text-tertiary); }
+  .sl-axis-lo { position: absolute; font-size: 10px; color: var(--color-text-tertiary); }
+  .sl-qh { position: absolute; top: 50%; left: 0; width: 100%; height: 0.5px; background: var(--color-border-tertiary); }
+  .sl-qv { position: absolute; top: 0; left: 50%; width: 0.5px; height: 100%; background: var(--color-border-tertiary); }
+  .sl-node { position: absolute; transform: translate(-50%, -50%); cursor: pointer; }
+  .sl-node.dimmed { opacity: 0.15; }
+  .sl-dot { border-radius: 50%; margin: 0 auto; transition: transform 0.15s; }
+  .sl-node:hover .sl-dot { transform: scale(1.12); }
+  .sl-label { font-size: 10px; font-weight: 500; text-align: center; margin-top: 4px; line-height: 1.3; color: var(--color-text-primary); white-space: nowrap; }
+  .sl-sub { font-size: 9px; color: var(--color-text-secondary); text-align: center; }
+  .sl-you-dot { width: 16px; height: 16px; background: #1D9E75; border-radius: 50%; margin: 0 auto; border: 2px solid var(--color-background-primary); }
+  .sl-you-label { font-size: 10px; font-weight: 500; text-align: center; margin-top: 4px; color: #1D9E75; white-space: nowrap; }
+  .sl-ring { border-radius: 50%; border: 2px solid currentColor; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); animation: sl-pulse 2.2s infinite; }
+  @keyframes sl-pulse { 0% { transform: translate(-50%,-50%) scale(1); opacity: 0.5; } 50% { transform: translate(-50%,-50%) scale(1.4); opacity: 0.15; } 100% { transform: translate(-50%,-50%) scale(1); opacity: 0.5; } }
+  .sl-tip { position: absolute; background: var(--color-background-primary); border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-lg); padding: 10px 12px; width: 200px; pointer-events: none; opacity: 0; transition: opacity 0.15s; z-index: 10; }
+  .sl-tip.show { opacity: 1; }
+  .sl-tip-name { font-size: 12px; font-weight: 500; margin-bottom: 4px; color: var(--color-text-primary); }
+  .sl-tip-row { display: flex; justify-content: space-between; font-size: 11px; padding: 2px 0; border-bottom: 0.5px solid var(--color-border-tertiary); }
+  .sl-tip-row:last-child { border-bottom: none; }
+  .sl-tip-key { color: var(--color-text-secondary); }
+  .sl-tip-val { font-weight: 500; color: var(--color-text-primary); }
+  .sl-tip-note { font-size: 10px; color: var(--color-text-secondary); margin-top: 6px; line-height: 1.4; }
+</style>
+
+<div class="sl-wrap">
+  <!-- INJECT: profile pills -->
+  <div class="sl-profile" id="sl-profile"></div>
+
+  <!-- INJECT: map title -->
+  <div class="sl-map-title"><!-- INJECT: title --></div>
+
+  <div class="sl-axes" id="sl-chart">
+    <div class="sl-axis-y">Labor reduction potential</div>
+    <div class="sl-axis-x">Brownfield-friendly ← deployment complexity → Greenfield required</div>
+    <div class="sl-axis-lo" style="top:4px;left:4px;">High</div>
+    <div class="sl-axis-lo" style="bottom:4px;left:4px;">Low</div>
+    <div class="sl-qh"></div>
+    <div class="sl-qv"></div>
+    <div class="sl-tip" id="sl-tip"></div>
+  </div>
+</div>
+
+<script>
+(function() {
+  // INJECT: profile pills array — [{ label, value }]
+  var profile = [];
+
+  // INJECT: nodes array
+  // { id, label, sub, x, y, color, size, state, capex, labor, note }
+  // state: 'candidate' | 'dimmed'
+  // x, y: 0–100 (% of chart area, origin bottom-left on Y)
+  var nodes = [];
+
+  // INJECT: operation marker position
+  var YOU = { x: 50, y: 50 };
+
+  // --- render pills ---
+  var pillEl = document.getElementById('sl-profile');
+  profile.forEach(function(p) {
+    var d = document.createElement('div');
+    d.className = 'sl-pill';
+    d.innerHTML = p.label + ' <span>' + p.value + '</span>';
+    pillEl.appendChild(d);
+  });
+
+  // --- chart render ---
+  var chart = document.getElementById('sl-chart');
+  var tip = document.getElementById('sl-tip');
+
+  function W() { return chart.offsetWidth; }
+  function H() { return chart.offsetHeight; }
+
+  function render() {
+    chart.querySelectorAll('.sl-node,.sl-you-node').forEach(function(n) { n.remove(); });
+
+    // You marker
+    var yel = document.createElement('div');
+    yel.className = 'sl-you-node';
+    yel.style.cssText = 'position:absolute;left:' + (YOU.x/100*W()) + 'px;top:' + ((1-YOU.y/100)*H()) + 'px;transform:translate(-50%,-50%);z-index:5;';
+    yel.innerHTML = '<div class="sl-you-dot"></div><div class="sl-you-label">Your operation</div>';
+    chart.appendChild(yel);
+
+    // Solution nodes
+    nodes.forEach(function(n) {
+      var el = document.createElement('div');
+      el.className = 'sl-node' + (n.state === 'dimmed' ? ' dimmed' : '');
+      var topPct = (1 - n.y/100) * H();
+      var leftPct = (n.x/100) * W();
+      el.style.left = leftPct + 'px';
+      el.style.top = topPct + 'px';
+
+      var ring = n.state === 'candidate'
+        ? '<div class="sl-ring" style="width:' + (n.size+14) + 'px;height:' + (n.size+14) + 'px;color:' + n.color + ';"></div>'
+        : '';
+
+      el.innerHTML =
+        '<div style="position:relative;width:' + n.size + 'px;height:' + n.size + 'px;margin:0 auto;">' +
+          ring +
+          '<div class="sl-dot" style="width:' + n.size + 'px;height:' + n.size + 'px;background:' + n.color + ';position:absolute;top:0;left:0;"></div>' +
+        '</div>' +
+        '<div class="sl-label">' + n.label + '</div>' +
+        '<div class="sl-sub">' + n.sub + '</div>';
+
+      el.addEventListener('mouseenter', function(e) { showTip(e, n); });
+      el.addEventListener('mouseleave', function() { tip.classList.remove('show'); });
+      chart.appendChild(el);
+    });
+  }
+
+  function showTip(e, n) {
+    tip.innerHTML =
+      '<div class="sl-tip-name">' + n.label + '</div>' +
+      '<div class="sl-tip-row"><span class="sl-tip-key">Capex</span><span class="sl-tip-val">' + n.capex + '</span></div>' +
+      '<div class="sl-tip-row"><span class="sl-tip-key">Labor reduction</span><span class="sl-tip-val">' + n.labor + '</span></div>' +
+      '<div class="sl-tip-note">' + n.note + '</div>';
+    var rect = chart.getBoundingClientRect();
+    var ex = e.clientX - rect.left;
+    var ey = e.clientY - rect.top;
+    tip.style.left = (ex > W()/2 ? ex - 212 : ex + 12) + 'px';
+    tip.style.top = Math.max(0, ey - 50) + 'px';
+    tip.classList.add('show');
+  }
+
+  render();
+  window.addEventListener('resize', render);
+})();
+</script>
+```
+
+---
+
 ## Input widget patterns
 
 Use input widgets when the next step depends on a bounded choice. Never use
