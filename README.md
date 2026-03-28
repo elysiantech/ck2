@@ -20,15 +20,19 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## Greeting & Starter Prompts
+## Modes
 
-**Greeting:** "What's the biggest headache on your floor right now?"
+The advisor supports multiple modes via URL query parameter. Each mode gets its own start screen, starter prompts, and workflow behavior.
 
-**Starter prompts (draft):**
-- "We're running ___ machines and can't keep people..."
-- "Our biggest safety issue is..."
-- "I just took over and don't know where to start..."
-- "We spend all day moving material between..."
+**Default (manufacturing):** [http://localhost:3000](http://localhost:3000)
+
+Machine tending, palletizing, assembly, welding — general manufacturing automation.
+
+**Intralogistics:** [http://localhost:3000?mode=intralogistics](http://localhost:3000?mode=intralogistics)
+
+Warehouse automation — AMRs, goods-to-person, robotic storage, pick/pack. Different start screen with warehouse-specific starter prompts.
+
+Mode flows through as a `state_value` to the hosted workflow, which switches its behavior accordingly. No mode = default manufacturing advisor.
 
 ## Test Prompts
 
@@ -49,3 +53,9 @@ This is a safety conversation, not a finance conversation. It should reflect tha
 > I know I need to automate something. My dad built this business and I've taken over and labor is just getting impossible. I don't even know where to start.
 
 One warm sentence, one question — "what does a typical day look like on your floor?" No premature widget. Get one anchor before estimating anything, then build fast once you have it.
+
+**Intralogistics — labor reliability**
+
+> We can't keep pickers. Turnover is constant and every peak season we're scrambling for temp labor that doesn't show up.
+
+Should recognize this as a warehouse labor problem and respond with intralogistics-specific automation options (AMRs, goods-to-person, robotic storage).

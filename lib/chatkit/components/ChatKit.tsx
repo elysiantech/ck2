@@ -707,11 +707,11 @@ export function ChatKit({ control, options, registerComposer }: ChatKitProps) {
                     hideActions
                   />
                 </div>
-              ) : (
+              ) : !options?.startScreen?.htmlUrl && options?.startScreen?.greeting ? (
                 <h1 className="text-2xl font-semibold text-gray-900 text-center">
-                  {options?.startScreen?.greeting || 'What are you working on?'}
+                  {options.startScreen.greeting}
                 </h1>
-              )}
+              ) : null}
             </div>
           ) : (
             <div className="max-w-3xl mx-auto px-4 py-4 space-y-6">

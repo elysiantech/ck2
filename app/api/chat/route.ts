@@ -40,7 +40,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (STREAMING_TYPES.includes(type)) {
-      const server = new HostedWorkflowServer(store, WORKFLOW_ID);
+      const mode = request.headers.get('x-workflow-mode');
+      const stateValues = mode
+        ? [{ id: 'mode', name: 'mode', value: mode }]
+        : [];
+      const server = new HostedWorkflowServer(store, WORKFLOW_ID, stateValues);
       const events = server.process(body);
       return withCookie(createSSEResponse(events));
     }

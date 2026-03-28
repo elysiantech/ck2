@@ -1,18 +1,32 @@
 'use client';
 
+import { useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
 import { ChatKit, ResizablePanel } from '@/lib/chatkit/components';
 import { useChatKit } from '@/lib/chatkit/hooks';
 import { buildShareableHtml } from '@/lib/chatkit/utils/widgetShare';
 
 const WORKFLOW_ID = process.env.NEXT_PUBLIC_WORKFLOW_ID!;
 
-export default function Home() {
+function AdvisorPage() {
+  const searchParams = useSearchParams();
+  const mode = searchParams.get('mode') || undefined;
+
+  const startScreenUrl = mode
+    ? `/start-screen-${mode}.html`
+    : '/start-screen.html';
+
+  const headers: Record<string, string> = {
+    'x-page-context': JSON.stringify({ workflowId: WORKFLOW_ID }),
+  };
+  if (mode) {
+    headers['x-workflow-mode'] = mode;
+  }
+
   const { control } = useChatKit({
     api: {
       url: '/api/chat',
-      headers: {
-        'x-page-context': JSON.stringify({ workflowId: WORKFLOW_ID }),
-      },
+      headers,
     },
   });
 
@@ -29,7 +43,7 @@ export default function Home() {
               attachments: { enabled: false },
             },
             startScreen: {
-              htmlUrl: '/start-screen.html',
+              htmlUrl: startScreenUrl,
             },
             widgets: {
               onWidgetAction: (name, args) => {
@@ -39,13 +53,11 @@ export default function Home() {
                     break;
                   case 'downloadPDF': {
                     const id = (args as { id?: string })?.id || 'document';
-                    // TODO: fetch from storage and trigger download
                     console.log('[downloadPDF]', id);
                     break;
                   }
                   case 'openDocument': {
                     const id = (args as { id?: string })?.id || 'document';
-                    // TODO: open document preview modal
                     console.log('[openDocument]', id);
                     break;
                   }
@@ -73,5 +85,13 @@ export default function Home() {
         />
       </ResizablePanel>
     </main>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense>
+      <AdvisorPage />
+    </Suspense>
   );
 }

@@ -23,10 +23,15 @@ const COMPACTION_TOKEN_THRESHOLD = 80000;
 const MAX_ITEMS = 1000; // Increased from 100
 
 export class HostedWorkflowServer {
+  private stateValues: Array<{ id: string; name: string; value: string }>;
+
   constructor(
     private store: Store,
-    private workflowId: string
-  ) {}
+    private workflowId: string,
+    stateValues?: Array<{ id: string; name: string; value: string }>
+  ) {
+    this.stateValues = stateValues || [];
+  }
 
   /**
    * Main entry point - process a ChatKit protocol request
@@ -445,7 +450,7 @@ export class HostedWorkflowServer {
       },
       body: JSON.stringify({
         input_data: { input, input_as_text: inputAsText },
-        state_values: [],
+        state_values: this.stateValues,
         session: true,
         tracing: { enabled: true },
         stream: true,
