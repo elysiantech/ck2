@@ -1,0 +1,89 @@
+<style>
+  .home {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 420px;
+    padding: 48px 32px 32px;
+    text-align: center;
+  }
+  .home-eyebrow {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-text-tertiary);
+    margin-bottom: 16px;
+  }
+  .home-heading {
+    font-size: 26px;
+    font-weight: 500;
+    color: var(--color-text-primary);
+    line-height: 1.3;
+    margin-bottom: 10px;
+    max-width: 480px;
+  }
+  .home-sub {
+    font-size: 15px;
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+    max-width: 420px;
+    margin-bottom: 36px;
+  }
+  .starters {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+    max-width: 560px;
+  }
+  .starter {
+    background: var(--color-background-primary);
+    border: 1px solid var(--color-border-secondary);
+    border-radius: var(--border-radius-lg);
+    padding: 12px 14px;
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    text-align: left;
+    cursor: pointer;
+    line-height: 1.45;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
+  }
+  .starter:hover {
+    border-color: var(--color-border-primary);
+    color: var(--color-text-primary);
+    background: var(--color-background-secondary);
+  }
+  .starter-arrow {
+    display: block;
+    font-size: 11px;
+    color: var(--color-text-tertiary);
+    margin-top: 6px;
+  }
+</style>
+
+<div class="home">
+  <div class="home-eyebrow">Fexel Advisor</div>
+  <div class="home-heading">What's the right automation for your warehouse?</div>
+  <div class="home-sub">Tell me what's happening on your floor. I'll build a live analysis: labor picture, ROI model, and a phased roadmap you can take to your team.</div>
+
+  <div class="starters">
+    <button class="starter" onclick="sendPrompt('We can\'t keep pickers. Turnover is constant and every peak season we\'re scrambling for temp labor that doesn\'t show up.')">
+      We can't keep pickers
+      <span class="starter-arrow">Labor reliability →</span>
+    </button>
+    <button class="starter" onclick="sendPrompt('I keep hearing about these robotic cube storage systems. We ship about 3,000 order lines a day out of an 80,000 square foot building. Is that kind of system right for us?')">
+      Is high-density robotic storage right for us?
+      <span class="starter-arrow">Find out →</span>
+    </button>
+    <button class="starter" onclick="sendPrompt('Walk me through what automation options exist for our operation. I\'m not sure where to start or what fits.')">
+      Walk me through my options
+      <span class="starter-arrow">Full analysis →</span>
+    </button>
+    <button class="starter" onclick="sendPrompt('What does an AMR system actually cost, fully installed? We have about 20 pickers across two shifts.')">
+      What does an AMR system cost?
+      <span class="starter-arrow">Get a range →</span>
+    </button>
+  </div>
+</div>
